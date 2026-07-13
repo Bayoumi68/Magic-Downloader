@@ -41,6 +41,7 @@ async function load() {
   $("enabled").checked = !!cfg.enabled;
   $("captureDownloads").checked = !!cfg.captureDownloads;
   $("showVideoButton").checked = cfg.showVideoButton !== false;
+  $("showFloatingButton").checked = cfg.showFloatingButton !== false;
   $("port").value = cfg.port || 7373;
   $("token").value = cfg.token || "";
 
@@ -249,6 +250,7 @@ $("save").addEventListener("click", async () => {
     enabled: $("enabled").checked,
     captureDownloads: $("captureDownloads").checked,
     showVideoButton: $("showVideoButton").checked,
+    showFloatingButton: $("showFloatingButton").checked,
     port,
     token: $("token").value.trim(),
   });

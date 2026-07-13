@@ -18,8 +18,14 @@
 
   let appOnline = false;
   let appHasFfmpeg = true;
-  let cfg = { enabled: true, showVideoButton: true };
+  let cfg = { enabled: true, showVideoButton: true, showFloatingButton: true };
   const videoOverlays = new Map(); // videoEl -> button
+  // Drag offset (relative to each video's default top-right anchor) so the user
+  // can reposition the on-video "Download" button; applies to all videos.
+  let videoBtnOffset = { dx: 0, dy: 0 };
+  let overlayDragging = false;
+  let overlaySuppressClick = false;
+  const VIDEO_BTN_OFFSET_KEY = "md_vbtn_offset";
 
   // ── messaging ─────────────────────────────────────────────────────────
   // Firefox = promise-based `browser`; Chrome/Edge MV3 = promise-based `chrome`.
@@ -374,20 +380,36 @@
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = "md-video-overlay";
+    btn.title = "Download this video · drag to move";
     btn.innerHTML = `⬇ Download <span class="md-badge" style="display:none"></span>`;
+    btn._mdVideo = video;
     document.documentElement.appendChild(btn);
     btn.addEventListener("click", async (e) => {
       e.preventDefault();
       e.stopPropagation();
+      if (overlaySuppressClick) {
+        overlaySuppressClick = false;
+        return; // was the end of a drag
+      }
       const direct = videoDirectItem(video);
       openPanel();
       renderList(direct ? [direct] : []);
     });
+    makeVideoBtnDraggable(btn);
     videoOverlays.set(video, btn);
     return btn;
   }
 
+  function overlayAnchor(rect) {
+    // default top-right of the video, then the user's saved drag offset
+    return {
+      left: Math.max(6, Math.min(window.innerWidth - 130, rect.right - 128)) + videoBtnOffset.dx,
+      top: Math.max(6, rect.top + 8) + videoBtnOffset.dy,
+    };
+  }
+
   function positionOverlay(video, btn) {
+    if (overlayDragging) return; // don't fight the user's drag
     const rect = video.getBoundingClientRect();
     const visible =
       rect.width >= MIN_VIDEO_W &&
@@ -401,10 +423,89 @@
       return;
     }
     btn.classList.add("md-show");
-    const top = Math.max(6, rect.top + 8);
-    const left = Math.min(window.innerWidth - 130, rect.right - 128);
+    const a = overlayAnchor(rect);
+    const w = btn.offsetWidth || 120;
+    const h = btn.offsetHeight || 30;
+    const left = Math.max(2, Math.min(window.innerWidth - w - 2, a.left));
+    const top = Math.max(2, Math.min(window.innerHeight - h - 2, a.top));
     btn.style.top = `${top}px`;
-    btn.style.left = `${Math.max(6, left)}px`;
+    btn.style.left = `${left}px`;
+  }
+
+  function makeVideoBtnDraggable(el) {
+    let dragging = false;
+    let moved = false;
+    let startX = 0;
+    let startY = 0;
+    let origLeft = 0;
+    let origTop = 0;
+    const point = (e) => (e.touches && e.touches[0]) || e;
+
+    function onDown(e) {
+      if (e.button != null && e.button !== 0) return;
+      const p = point(e);
+      const rect = el.getBoundingClientRect();
+      dragging = true;
+      moved = false;
+      overlayDragging = true;
+      startX = p.clientX;
+      startY = p.clientY;
+      origLeft = rect.left;
+      origTop = rect.top;
+      document.addEventListener("mousemove", onMove, true);
+      document.addEventListener("mouseup", onUp, true);
+      document.addEventListener("touchmove", onMove, { capture: true, passive: false });
+      document.addEventListener("touchend", onUp, true);
+      e.preventDefault();
+      e.stopPropagation();
+    }
+
+    function onMove(e) {
+      if (!dragging) return;
+      const p = point(e);
+      const dx = p.clientX - startX;
+      const dy = p.clientY - startY;
+      if (Math.abs(dx) > 4 || Math.abs(dy) > 4) moved = true;
+      const w = el.offsetWidth || 120;
+      const h = el.offsetHeight || 30;
+      const nl = Math.max(2, Math.min(window.innerWidth - w - 2, origLeft + dx));
+      const nt = Math.max(2, Math.min(window.innerHeight - h - 2, origTop + dy));
+      el.style.left = nl + "px";
+      el.style.top = nt + "px";
+      if (e.cancelable) e.preventDefault();
+    }
+
+    function onUp() {
+      if (!dragging) return;
+      dragging = false;
+      overlayDragging = false;
+      document.removeEventListener("mousemove", onMove, true);
+      document.removeEventListener("mouseup", onUp, true);
+      document.removeEventListener("touchmove", onMove, true);
+      document.removeEventListener("touchend", onUp, true);
+      if (moved) {
+        overlaySuppressClick = true;
+        // Save the offset relative to this video's default anchor so all
+        // video buttons move consistently.
+        const video = el._mdVideo;
+        if (video) {
+          const vr = video.getBoundingClientRect();
+          const baseLeft = Math.max(6, Math.min(window.innerWidth - 130, vr.right - 128));
+          const baseTop = Math.max(6, vr.top + 8);
+          const br = el.getBoundingClientRect();
+          videoBtnOffset = { dx: Math.round(br.left - baseLeft), dy: Math.round(br.top - baseTop) };
+          try {
+            B.storage.local.set({ [VIDEO_BTN_OFFSET_KEY]: videoBtnOffset });
+          } catch (_) {
+            /* ignore */
+          }
+          repositionAll();
+        }
+      }
+    }
+
+    el.addEventListener("mousedown", onDown, true);
+    el.addEventListener("touchstart", onDown, { capture: true, passive: false });
   }
 
   async function refreshOverlays() {
@@ -455,12 +556,22 @@
     }
     if (cfg.enabled === false) return; // extension turned off in popup
 
+    // Restore the saved on-video button drag offset.
+    try {
+      B.storage.local.get(VIDEO_BTN_OFFSET_KEY).then((r) => {
+        const o = r && r[VIDEO_BTN_OFFSET_KEY];
+        if (o && typeof o.dx === "number") videoBtnOffset = o;
+      });
+    } catch (_) {
+      /* storage unavailable */
+    }
+
     const cfgHost = document.createElement("div");
     cfgHost.id = ROOT_ID;
     document.documentElement.appendChild(cfgHost);
 
     buildPanel(cfgHost);
-    buildFab(cfgHost);
+    if (cfg.showFloatingButton !== false) buildFab(cfgHost); // optional
 
     document.addEventListener("click", (e) => {
       const root = document.getElementById(ROOT_ID);

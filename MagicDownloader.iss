@@ -4,7 +4,7 @@
 ; Output:  installer\MagicDownloader-Setup-<version>.exe
 
 #define MyAppName "Magic Downloader"
-#define MyAppVersion "0.5.2"
+#define MyAppVersion "0.5.3"
 #define MyAppPublisher "Magic Downloader"
 #define MyAppExeName "MagicDownloader.exe"
 
@@ -36,7 +36,8 @@ Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
 OutputDir=installer
-OutputBaseFilename=MagicDownloader-Setup-{#MyAppVersion}
+; Version-less filename so the GitHub "latest" download link is permanent.
+OutputBaseFilename=MagicDownloader-Setup
 SetupIconFile=browser_extension\icons\app.ico
 LicenseFile=LICENSE
 

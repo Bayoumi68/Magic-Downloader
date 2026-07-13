@@ -21,6 +21,7 @@ const DEFAULTS = {
   minSizeBytes: 0, // 0 = capture all; set e.g. 102400 to skip tiny files
   enabled: true,
   showVideoButton: true,
+  showFloatingButton: true,
 };
 
 // Prevent re-entrancy when we cancel browser downloads
