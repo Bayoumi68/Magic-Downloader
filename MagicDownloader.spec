@@ -61,6 +61,7 @@ exe = EXE(
     console=False,          # GUI app — no console window
     disable_windowed_traceback=False,
     icon=icon,
+    version="version_info.txt",   # embed FileVersion/ProductVersion 0.5.1.0
 )
 
 coll = COLLECT(

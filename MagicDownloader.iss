@@ -18,8 +18,16 @@ AppPublisher={#MyAppPublisher}
 DefaultDirName={autopf}\{#MyAppName}
 DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
+; Always show the "Select Destination Location" page, even when upgrading.
+DisableDirPage=no
+UsePreviousAppDir=no
 UninstallDisplayIcon={app}\{#MyAppExeName}
 UninstallDisplayName={#MyAppName}
+; Close a running Magic Downloader before installing so the .exe can be
+; replaced (otherwise an upgrade over a running/tray instance keeps the old
+; files → "installed the old version").
+CloseApplications=yes
+RestartApplications=no
 ; Install per-user by default (no admin prompt); user can pick all-users.
 PrivilegesRequired=lowest
 PrivilegesRequiredOverridesAllowed=dialog
