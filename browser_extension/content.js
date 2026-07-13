@@ -82,6 +82,7 @@
 
   function openPanel() {
     if (!panel) return;
+    positionPanel();
     panel.classList.add("md-open");
     refreshStatus();
     renderList();
@@ -199,22 +200,137 @@
     );
   }
 
-  // ── floating action button ────────────────────────────────────────────
+  // ── floating action button (draggable) ────────────────────────────────
   let fab = null;
+  const FAB_POS_KEY = "md_fab_pos";
+  let suppressNextClick = false;
 
   function buildFab(root) {
     fab = document.createElement("button");
     fab.id = "md-fab";
     fab.type = "button";
-    fab.title = "Magic Downloader — click to see detected videos";
+    fab.title = "Magic Downloader — click to open · drag to move";
     fab.classList.add("offline");
     fab.innerHTML = `⬇ MD <span class="md-fab-count" style="display:none"></span>`;
     root.appendChild(fab);
+
     fab.addEventListener("click", (e) => {
       e.preventDefault();
       e.stopPropagation();
+      if (suppressNextClick) {
+        suppressNextClick = false;
+        return; // this "click" was the end of a drag
+      }
       togglePanel();
     });
+
+    makeDraggable(fab);
+    restoreFabPos();
+  }
+
+  function clampFab(left, top) {
+    const w = fab.offsetWidth || 52;
+    const h = fab.offsetHeight || 52;
+    return [
+      Math.max(2, Math.min(window.innerWidth - w - 2, left)),
+      Math.max(2, Math.min(window.innerHeight - h - 2, top)),
+    ];
+  }
+
+  function setFabPos(left, top) {
+    const [l, t] = clampFab(left, top);
+    fab.style.setProperty("left", l + "px", "important");
+    fab.style.setProperty("top", t + "px", "important");
+    fab.style.setProperty("right", "auto", "important");
+    fab.style.setProperty("bottom", "auto", "important");
+  }
+
+  function restoreFabPos() {
+    try {
+      B.storage.local.get(FAB_POS_KEY).then((r) => {
+        const pos = r && r[FAB_POS_KEY];
+        if (pos && typeof pos.left === "number") setFabPos(pos.left, pos.top);
+      });
+    } catch (_) {
+      /* storage unavailable */
+    }
+  }
+
+  function makeDraggable(el) {
+    let dragging = false;
+    let moved = false;
+    let startX = 0;
+    let startY = 0;
+    let origLeft = 0;
+    let origTop = 0;
+
+    const point = (e) => (e.touches && e.touches[0]) || e;
+
+    function onDown(e) {
+      if (e.button != null && e.button !== 0) return;
+      const p = point(e);
+      const rect = el.getBoundingClientRect();
+      dragging = true;
+      moved = false;
+      startX = p.clientX;
+      startY = p.clientY;
+      origLeft = rect.left;
+      origTop = rect.top;
+      setFabPos(rect.left, rect.top); // switch from right/bottom to left/top
+      document.addEventListener("mousemove", onMove, true);
+      document.addEventListener("mouseup", onUp, true);
+      document.addEventListener("touchmove", onMove, { capture: true, passive: false });
+      document.addEventListener("touchend", onUp, true);
+      e.preventDefault();
+    }
+
+    function onMove(e) {
+      if (!dragging) return;
+      const p = point(e);
+      const dx = p.clientX - startX;
+      const dy = p.clientY - startY;
+      if (Math.abs(dx) > 4 || Math.abs(dy) > 4) moved = true;
+      setFabPos(origLeft + dx, origTop + dy);
+      if (e.cancelable) e.preventDefault();
+    }
+
+    function onUp() {
+      if (!dragging) return;
+      dragging = false;
+      document.removeEventListener("mousemove", onMove, true);
+      document.removeEventListener("mouseup", onUp, true);
+      document.removeEventListener("touchmove", onMove, true);
+      document.removeEventListener("touchend", onUp, true);
+      if (moved) {
+        suppressNextClick = true;
+        const rect = el.getBoundingClientRect();
+        try {
+          B.storage.local.set({ [FAB_POS_KEY]: { left: rect.left, top: rect.top } });
+        } catch (_) {
+          /* ignore */
+        }
+        if (panel && panel.classList.contains("md-open")) positionPanel();
+      }
+    }
+
+    el.addEventListener("mousedown", onDown, true);
+    el.addEventListener("touchstart", onDown, { capture: true, passive: false });
+  }
+
+  function positionPanel() {
+    if (!panel || !fab) return;
+    const r = fab.getBoundingClientRect();
+    const pw = 340;
+    const ph = Math.min(window.innerHeight * 0.7, 420);
+    let left = r.right - pw;
+    let top = r.top - ph - 8; // prefer above the button
+    if (top < 8) top = r.bottom + 8; // otherwise below it
+    left = Math.max(8, Math.min(window.innerWidth - pw - 8, left));
+    top = Math.max(8, Math.min(window.innerHeight - 60, top));
+    panel.style.setProperty("left", left + "px", "important");
+    panel.style.setProperty("top", top + "px", "important");
+    panel.style.setProperty("right", "auto", "important");
+    panel.style.setProperty("bottom", "auto", "important");
   }
 
   async function updateFab() {

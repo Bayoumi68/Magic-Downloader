@@ -13,8 +13,15 @@ from magic_downloader.config import category_for_filename, resolve_save_path
 from magic_downloader.engine import suggest_filename
 from magic_downloader.gui import theme as T
 from magic_downloader.media import ffmpeg as ffmpeg_mod
+from magic_downloader.gui.widgets import ProgressBar, SegmentBar
 from magic_downloader.media.detect import MediaKind, classify_url
-from magic_downloader.models import DownloadJob
+from magic_downloader.models import (
+    DownloadJob,
+    DownloadStatus,
+    format_bytes,
+    format_eta,
+    format_speed,
+)
 
 
 def _center(win: tk.Toplevel) -> None:
@@ -703,6 +710,12 @@ class SettingsDialog(tk.Toplevel):
             variable=self.browser_auto,
         ).grid(row=2, column=0, columnspan=3, sticky="w", pady=4)
 
+        self.show_progress = tk.BooleanVar(value=bool(self.settings.get("show_progress_dialog", True)))
+        ttk.Checkbutton(
+            f, text="Show a progress window for each download",
+            variable=self.show_progress,
+        ).grid(row=6, column=0, columnspan=3, sticky="w", pady=4)
+
         self.close_to_tray = tk.BooleanVar(value=bool(self.settings.get("close_to_tray", True)))
         ttk.Checkbutton(
             f, text="Keep running in the system tray when I close the window (only Exit quits)",
@@ -1014,6 +1027,7 @@ class SettingsDialog(tk.Toplevel):
         self.settings["browser_auto_start"] = bool(self.browser_auto.get())
         self.settings["close_to_tray"] = bool(self.close_to_tray.get())
         self.settings["minimize_to_tray"] = bool(self.minimize_to_tray.get())
+        self.settings["show_progress_dialog"] = bool(self.show_progress.get())
         try:
             from magic_downloader import startup as _startup
 
@@ -1064,3 +1078,184 @@ class SettingsDialog(tk.Toplevel):
         folder = self.cat_folder_var.get().strip()
         if folder:
             self._cat_paths[cat] = folder
+
+
+class DownloadProgressDialog(tk.Toplevel):
+    """IDM-style per-download progress window (modeless — several can be open).
+
+    Reads live state from the manager; the app drives ``update_view`` each tick.
+    ``open_path(Path)`` opens a file/folder.
+    """
+
+    def __init__(self, master: tk.Misc, manager, job_id: str, open_path: Callable[[Path], None]) -> None:
+        super().__init__(master)
+        self.manager = manager
+        self.job_id = job_id
+        self.open_path = open_path
+        self._closed = False
+        self.title("Downloading — Magic Downloader")
+        self.configure(bg=T.BG)
+        self.geometry("580x350")
+        self.minsize(540, 330)
+        self.transient(master)
+
+        job = self.manager.get_job(job_id)
+        header = tk.Frame(self, bg=T.BG_TOOLBAR, height=44)
+        header.pack(fill=tk.X)
+        header.pack_propagate(False)
+        self.title_lbl = tk.Label(
+            header, text=f"  ⬇  {job.filename if job else 'download'}", bg=T.BG_TOOLBAR,
+            fg=T.FG_ON_DARK, font=T.FONT_TITLE, anchor="w",
+        )
+        self.title_lbl.pack(fill=tk.BOTH, expand=True, padx=12)
+
+        body = tk.Frame(self, bg=T.BG, padx=16, pady=12)
+        body.pack(fill=tk.BOTH, expand=True)
+        self.url_lbl = tk.Label(body, text="", bg=T.BG, fg=T.BLUE, font=T.FONT_SMALL, anchor="w")
+        self.url_lbl.pack(fill=tk.X)
+        self.path_lbl = tk.Label(body, text="", bg=T.BG, fg=T.FG_MUTED, font=T.FONT_SMALL, anchor="w")
+        self.path_lbl.pack(fill=tk.X, pady=(0, 8))
+
+        self.bar = ProgressBar(body, height=22)
+        self.bar.pack(fill=tk.X)
+
+        stats = tk.Frame(body, bg=T.BG)
+        stats.pack(fill=tk.X, pady=8)
+        self._stat: dict[str, tk.Label] = {}
+        for col, (key, title) in enumerate(
+            [("status", "Status"), ("size", "Downloaded"), ("speed", "Transfer rate"),
+             ("eta", "Time left"), ("parts", "Connections")]
+        ):
+            f = tk.Frame(stats, bg=T.BG)
+            f.grid(row=0, column=col, sticky="w", padx=(0, 16))
+            tk.Label(f, text=title, bg=T.BG, fg=T.FG_MUTED, font=("Segoe UI", 8)).pack(anchor="w")
+            v = tk.Label(f, text="—", bg=T.BG, fg=T.FG, font=T.FONT_UI_BOLD)
+            v.pack(anchor="w")
+            self._stat[key] = v
+
+        tk.Label(body, text="Download progress (connections):", bg=T.BG, fg=T.FG_MUTED,
+                 font=T.FONT_SMALL, anchor="w").pack(fill=tk.X)
+        self.segbar = SegmentBar(body, height=34)
+        self.segbar.pack(fill=tk.X, pady=(2, 8))
+
+        self.close_when_done = tk.BooleanVar(
+            value=bool(self.manager.settings.get("progress_close_on_complete", False))
+        )
+        ttk.Checkbutton(
+            body, text="Close this window when the download completes",
+            variable=self.close_when_done, command=self._remember_close_pref,
+        ).pack(anchor="w")
+
+        btns = tk.Frame(self, bg=T.BG, padx=14, pady=10)
+        btns.pack(fill=tk.X)
+        self.pause_btn = ttk.Button(btns, text="Pause", command=self._toggle)
+        self.pause_btn.pack(side=tk.LEFT)
+        self.cancel_btn = ttk.Button(btns, text="Cancel", command=self._cancel)
+        self.cancel_btn.pack(side=tk.LEFT, padx=6)
+        self.open_btn = ttk.Button(btns, text="Open", command=self._open_file)  # shown when complete
+        ttk.Button(btns, text="Hide", command=self._hide).pack(side=tk.RIGHT, padx=4)
+        self.folder_btn = ttk.Button(btns, text="Open folder", command=self._open_folder)
+        self.folder_btn.pack(side=tk.RIGHT, padx=4)
+
+        self.protocol("WM_DELETE_WINDOW", self._hide)
+        _center(self)
+        self.update_view()
+
+    def _remember_close_pref(self) -> None:
+        self.manager.settings["progress_close_on_complete"] = bool(self.close_when_done.get())
+        try:
+            self.manager.save_settings()
+        except Exception:
+            pass
+
+    def update_view(self) -> None:
+        if self._closed:
+            return
+        job = self.manager.get_job(self.job_id)
+        if job is None:
+            self._closed = True
+            self.destroy()
+            return
+
+        active = job.status == DownloadStatus.DOWNLOADING
+        processing = job.status == DownloadStatus.PROCESSING
+        icon = "✅" if job.status == DownloadStatus.COMPLETE else ("⚠" if job.status == DownloadStatus.FAILED else "⬇")
+        self.title_lbl.configure(text=f"  {icon}  {job.filename}")
+        self.url_lbl.configure(text=(job.url or "")[:95])
+        self.path_lbl.configure(text=f"Save to: {job.save_path}")
+        self.bar.set_progress(job.progress, active=active or processing)
+
+        status = job.status.value
+        if processing:
+            status = "Merging…"
+        elif job.status == DownloadStatus.FAILED and job.error:
+            status = f"Failed: {job.error[:40]}"
+        self._stat["status"].configure(text=status)
+
+        if job.is_stream and job.media_meta.get("seg_total"):
+            self._stat["size"].configure(
+                text=f"{job.media_meta.get('seg_done', 0)} / {job.media_meta['seg_total']} parts"
+            )
+        else:
+            size = format_bytes(job.downloaded) + (f" / {format_bytes(job.total_size)}" if job.total_size else "")
+            self._stat["size"].configure(text=size or "—")
+        self._stat["speed"].configure(text=format_speed(job.speed_bps) if active else "—")
+        self._stat["eta"].configure(text=format_eta(job.eta_seconds) if active else "—")
+        self._stat["parts"].configure(
+            text=job.media_type.upper() if job.is_stream else (str(job.connections) if job.supports_ranges else "1")
+        )
+        self.segbar.set_job(job)
+
+        busy = job.status in (
+            DownloadStatus.DOWNLOADING, DownloadStatus.CONNECTING, DownloadStatus.QUEUED, DownloadStatus.PROCESSING,
+        )
+        if busy:
+            self.pause_btn.configure(text="Pause", state="normal")
+            self.cancel_btn.configure(state="normal")
+            self.open_btn.pack_forget()
+        elif job.status == DownloadStatus.PAUSED:
+            self.pause_btn.configure(text="Resume", state="normal")
+            self.cancel_btn.configure(state="normal")
+            self.open_btn.pack_forget()
+        elif job.status == DownloadStatus.COMPLETE:
+            self.pause_btn.configure(state="disabled")
+            self.cancel_btn.configure(state="disabled")
+            self.open_btn.pack(side=tk.LEFT, padx=6)
+            if self.close_when_done.get():
+                self.after(1200, self._hide)
+        else:  # FAILED / CANCELLED
+            self.pause_btn.configure(text="Retry", state="normal")
+            self.cancel_btn.configure(state="disabled")
+            self.open_btn.pack_forget()
+
+    def _toggle(self) -> None:
+        job = self.manager.get_job(self.job_id)
+        if not job:
+            return
+        if job.status in (DownloadStatus.DOWNLOADING, DownloadStatus.CONNECTING):
+            self.manager.pause_job(self.job_id)
+        else:
+            self.manager.retry_job(self.job_id)
+        self.update_view()
+
+    def _cancel(self) -> None:
+        self.manager.cancel_job(self.job_id)
+        self.update_view()
+
+    def _open_file(self) -> None:
+        job = self.manager.get_job(self.job_id)
+        if job:
+            self.open_path(Path(job.save_path))
+
+    def _open_folder(self) -> None:
+        job = self.manager.get_job(self.job_id)
+        if job:
+            self.open_path(Path(job.save_path).parent)
+
+    def _hide(self) -> None:
+        # Just close the window — does NOT cancel the download.
+        self._closed = True
+        try:
+            self.destroy()
+        except tk.TclError:
+            pass

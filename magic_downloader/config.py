@@ -40,6 +40,9 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "close_to_tray": True,
     "minimize_to_tray": False,  # also hide to tray on the minimize button
     "last_save_dir": "",        # remember the folder the user last downloaded to
+    # Pop a separate progress window for each download (IDM-style)
+    "show_progress_dialog": True,
+    "progress_close_on_complete": False,
     "category_paths": {
         "General": str(DOWNLOADS_DIR / "General"),
         "Compressed": str(DOWNLOADS_DIR / "Compressed"),

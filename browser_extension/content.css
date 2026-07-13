@@ -30,6 +30,8 @@
   gap: 6px !important;
   line-height: 1 !important;
 }
+#md-fab { cursor: grab !important; touch-action: none !important; user-select: none !important; }
+#md-fab:active { cursor: grabbing !important; }
 #md-fab:hover { background: #1e3f73 !important; }
 #md-fab.offline { background: #7a8694 !important; }
 #md-fab .md-fab-count {

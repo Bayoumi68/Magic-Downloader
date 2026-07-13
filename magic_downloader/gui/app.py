@@ -18,6 +18,7 @@ from magic_downloader.gui.dialogs import (
     AddDownloadDialog,
     AddVideoDialog,
     CaptureDialog,
+    DownloadProgressDialog,
     SettingsDialog,
 )
 from magic_downloader.gui.widgets import ProgressBar, SegmentBar, ToolbarButton
@@ -64,6 +65,7 @@ class MagicDownloaderApp(tk.Tk):
         self._single_instance = None
         self._capture_queue: list[dict] = []
         self._capture_active = False
+        self._progress_dialogs: dict[str, DownloadProgressDialog] = {}
 
         self._build_menu()
         self._build_toolbar()
@@ -314,7 +316,7 @@ class MagicDownloaderApp(tk.Tk):
         self.tree.tag_configure("Queued", foreground=T.GRAY)
 
         self.tree.bind("<<TreeviewSelect>>", lambda e: self._update_detail())
-        self.tree.bind("<Double-1>", lambda e: self._open_file())
+        self.tree.bind("<Double-1>", lambda e: self._on_double_click())
         self.tree.bind("<Button-3>", self._context_menu)
 
         self._ctx = tk.Menu(self, tearoff=0)
@@ -322,6 +324,7 @@ class MagicDownloaderApp(tk.Tk):
         self._ctx.add_command(label="⏸  Pause", command=self._pause_selected)
         self._ctx.add_command(label="⏹  Stop", command=self._cancel_selected)
         self._ctx.add_command(label="🎬  Choose quality…", command=self._choose_quality)
+        self._ctx.add_command(label="📊  Show progress window", command=self._show_progress_selected)
         self._ctx.add_separator()
         self._ctx.add_command(label="📄  Open file", command=self._open_file)
         self._ctx.add_command(label="📂  Open folder", command=self._open_folder)
@@ -520,6 +523,46 @@ class MagicDownloaderApp(tk.Tk):
         self._refresh_tree()
         self._update_detail()
         self._update_status()
+        self._update_progress_dialogs()
+
+    def _show_progress_selected(self) -> None:
+        for jid in self._selected_ids():
+            self._open_progress(jid)
+
+    def _on_double_click(self) -> None:
+        ids = self._selected_ids()
+        if not ids:
+            return
+        job = self.manager.get_job(ids[0])
+        if not job:
+            return
+        # Complete → open the file; still going → open its progress window.
+        if job.status == DownloadStatus.COMPLETE:
+            self._open_file()
+        else:
+            self._open_progress(job.id)
+
+    def _open_progress(self, job_id: str) -> None:
+        """Pop (or focus) a per-download progress window, IDM-style."""
+        if not self.manager.settings.get("show_progress_dialog", True):
+            return
+        existing = self._progress_dialogs.get(job_id)
+        if existing is not None and existing.winfo_exists():
+            existing.deiconify()
+            existing.lift()
+            return
+        dlg = DownloadProgressDialog(self, self.manager, job_id, self._open_path)
+        self._progress_dialogs[job_id] = dlg
+
+    def _update_progress_dialogs(self) -> None:
+        for jid, dlg in list(self._progress_dialogs.items()):
+            try:
+                if not dlg.winfo_exists():
+                    del self._progress_dialogs[jid]
+                    continue
+                dlg.update_view()
+            except tk.TclError:
+                self._progress_dialogs.pop(jid, None)
 
     def _maybe_rebuild_sidebar(self) -> None:
         cats = tuple((self.manager.settings.get("category_paths") or {}).keys())
@@ -743,6 +786,8 @@ class MagicDownloaderApp(tk.Tk):
         def on_submit(job: DownloadJob) -> None:
             start = getattr(job, "_start_immediately", True)
             self.manager.add_job(job, start=start)
+            if start:
+                self._open_progress(job.id)
             self._filter = FILTER_ALL
             self.cat_list.selection_clear(0, tk.END)
             self.cat_list.selection_set(0)
@@ -767,7 +812,8 @@ class MagicDownloaderApp(tk.Tk):
 
         def on_submit(url: str, folder: str, sel: dict, media_type: str, title: str, category: str = "") -> None:
             mt = media_type if media_type in ("page", "hls", "dash") else "page"
-            self.manager.add_video_job(url, mt, sel, title=title, folder=folder, start=True, category=category or None)
+            job = self.manager.add_video_job(url, mt, sel, title=title, folder=folder, start=True, category=category or None)
+            self._open_progress(job.id)
             self._remember_save_dir(folder)
             self._filter = FILTER_ALL
             self.cat_list.selection_clear(0, tk.END)
@@ -808,13 +854,15 @@ class MagicDownloaderApp(tk.Tk):
             if always != bool(self.manager.settings.get("confirm_browser_captures", True)):
                 self.manager.settings["confirm_browser_captures"] = always
                 self.manager.save_settings()
-            self.manager.add_capture_confirmed(
+            res = self.manager.add_capture_confirmed(
                 url=final["url"], filename=final["filename"], folder=final["folder"],
                 category=final["category"], connections=final["connections"],
                 media_type=final["media_type"], media_meta=final["media_meta"],
                 cookie=final["cookie"], referrer=final["referrer"],
                 extra_headers=final["extra_headers"], start=start, source="browser",
             )
+            if start and res.get("id"):
+                self._open_progress(res["id"])
             self._remember_save_dir(final["folder"])
             self._filter = FILTER_ALL
             self.cat_list.selection_clear(0, tk.END)
@@ -869,6 +917,7 @@ class MagicDownloaderApp(tk.Tk):
             return
         for jid in ids:
             self.manager.retry_job(jid)
+            self._open_progress(jid)
 
     def _pause_selected(self) -> None:
         for jid in self._selected_ids():
@@ -1045,8 +1094,11 @@ class MagicDownloaderApp(tk.Tk):
 
             result = self.manager.add_from_browser(data)
             name = result.get("filename") or "file"
+            jid = result.get("id")
             try:
                 self.after(0, lambda: self._show_toast(f"Captured from browser: {name}"))
+                if jid and self.manager.settings.get("browser_auto_start", True):
+                    self.after(0, lambda: self._open_progress(jid))
                 self.after(0, self._refresh_all)
             except tk.TclError:
                 pass
