@@ -1,3 +1,5 @@
+<p align="center"><img src="logo.png" alt="Magic Downloader" width="220"></p>
+
 # Magic Downloader
 
 An **Internet Download Manager (IDM)–style** multi-connection download manager for Windows, with a **real browser extension** and a **download button right on video players**.
@@ -10,8 +12,8 @@ An **Internet Download Manager (IDM)–style** multi-connection download manager
 
 **[Get the latest release →](https://github.com/Bayoumi68/Magic-Downloader/releases/latest)**
 
-- **Installer** (recommended): [`MagicDownloader-Setup-0.5.0.exe`](https://github.com/Bayoumi68/Magic-Downloader/releases/latest/download/MagicDownloader-Setup-0.5.0.exe) — Start-menu shortcut + uninstaller, installs per-user (no admin).
-- **Portable** (no install): [`MagicDownloader-0.5.0-win64.zip`](https://github.com/Bayoumi68/Magic-Downloader/releases/latest/download/MagicDownloader-0.5.0-win64.zip) — unzip and run `MagicDownloader.exe`.
+- **Installer** (recommended): [`MagicDownloader-Setup-0.5.1.exe`](https://github.com/Bayoumi68/Magic-Downloader/releases/latest/download/MagicDownloader-Setup-0.5.1.exe) — Start-menu shortcut + uninstaller, installs per-user (no admin).
+- **Portable** (no install): [`MagicDownloader-0.5.1-win64.zip`](https://github.com/Bayoumi68/Magic-Downloader/releases/latest/download/MagicDownloader-0.5.1-win64.zip) — unzip and run `MagicDownloader.exe`.
 
 > Windows may show a SmartScreen "unknown publisher" prompt (the app is unsigned) — click **More info → Run anyway**. See [PUBLISHING.md](PUBLISHING.md).
 > Browser extension: install from [`browser_extension/`](browser_extension/) (Chrome/Edge) or [FIREFOX_INSTALL.md](FIREFOX_INSTALL.md) (Firefox).

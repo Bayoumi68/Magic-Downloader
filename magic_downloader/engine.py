@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import mimetypes
+import os
 import re
 import threading
 import time
@@ -140,15 +142,14 @@ class DownloadEngine:
         self.job.last_modified = r.headers.get("Last-Modified") or ""
 
         cd = r.headers.get("Content-Disposition") or ""
-        guessed = _filename_from_content_disposition(cd)
-        if not guessed:
-            guessed = _filename_from_url(final_url)
-        if guessed and (not filename or filename == "download"):
-            filename = guessed
+        content_type = r.headers.get("Content-Type") or ""
+        # Fix junk names (GUIDs / no extension) using the server's real name.
+        new_name = _resolve_name(filename, cd, content_type, final_url)
+        if new_name and new_name != filename:
+            filename = _sanitize_name(new_name)
             self.job.filename = filename
-            # Update save path directory + new name if path was placeholder
             parent = Path(self.job.save_path).parent
-            self.job.save_path = str(parent / filename)
+            self.job.save_path = str(_dedupe(parent / filename))
 
         # Verify range support with a tiny range request when size known
         if self.job.total_size > 1:
@@ -430,3 +431,113 @@ def _filename_from_content_disposition(cd: str) -> str | None:
 
 def suggest_filename(url: str) -> str:
     return _filename_from_url(url)
+
+
+_UUID_RE = re.compile(r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
+_HEX_RE = re.compile(r"^[0-9a-fA-F]{16,}$")
+
+
+def looks_like_junk_name(name: str) -> bool:
+    """True if a filename is unusable — no extension, or a GUID/hash blob like
+    'a5de8a50-7e22-4163-97a4-914d6644caa7'."""
+    if not name or name.strip().lower() in ("", "download", "video", "file"):
+        return True
+    stem, ext = os.path.splitext(name)
+    if not ext or len(ext) > 6 or not ext[1:].isalnum():
+        return True
+    if _UUID_RE.match(stem) or _HEX_RE.match(stem):
+        return True
+    return False
+
+
+def _ext_from_content_type(ct: str) -> str:
+    ct = (ct or "").split(";")[0].strip().lower()
+    if not ct or ct in ("application/octet-stream", "binary/octet-stream", "application/download"):
+        return ""
+    ext = mimetypes.guess_extension(ct)
+    fixes = {".jpe": ".jpg", ".htm": ".html", ".mp4a": ".m4a"}
+    return fixes.get(ext, ext) or ""
+
+
+def _sanitize_name(name: str) -> str:
+    for ch in '<>:"/\\|?*':
+        name = name.replace(ch, "_")
+    name = name.strip().strip(".") or "download"
+    return name[:200]
+
+
+def _dedupe(path: Path) -> Path:
+    if not path.exists() and not Path(str(path) + ".part").exists():
+        return path
+    stem, suf = path.stem, path.suffix
+    i = 1
+    while True:
+        cand = path.with_name(f"{stem} ({i}){suf}")
+        if not cand.exists() and not Path(str(cand) + ".part").exists():
+            return cand
+        i += 1
+
+
+def _resolve_name(current: str, cd: str, content_type: str, final_url: str) -> str | None:
+    """Best filename from the server, used only when ``current`` is junk."""
+    cd_name = _filename_from_content_disposition(cd)
+    if cd_name and looks_like_junk_name(current):
+        return cd_name
+    if not looks_like_junk_name(current):
+        return None
+    # current is junk and the server didn't name it — try the URL, then add an
+    # extension inferred from the content type.
+    base = _filename_from_url(final_url)
+    if not looks_like_junk_name(base):
+        return base
+    ext = _ext_from_content_type(content_type)
+    if ext:
+        stem = os.path.splitext(current)[0] or os.path.splitext(base)[0] or "download"
+        return stem + ext
+    return None
+
+
+def resolve_download_name(
+    url: str,
+    cookie: str = "",
+    referrer: str = "",
+    user_agent: str = "",
+    timeout: int = 12,
+) -> tuple[str, int]:
+    """Ask the server (HEAD, falling back to GET) for the real filename + size.
+
+    Returns (filename_or_empty, size). Used before showing the download dialog
+    so junk URLs (GUIDs) get their real name/extension, IDM-style.
+    """
+    headers: dict[str, str] = {}
+    if user_agent:
+        headers["User-Agent"] = user_agent
+    if cookie:
+        headers["Cookie"] = cookie
+    if referrer:
+        headers["Referer"] = referrer
+    try:
+        r = requests.head(url, headers=headers, allow_redirects=True, timeout=timeout)
+        if r.status_code >= 400 or not (
+            r.headers.get("Content-Disposition") or r.headers.get("Content-Type")
+        ):
+            r = requests.get(url, headers=headers, allow_redirects=True, timeout=timeout, stream=True)
+            r.close()
+    except requests.RequestException:
+        return "", 0
+
+    final_url = str(r.url)
+    cd = r.headers.get("Content-Disposition") or ""
+    ct = r.headers.get("Content-Type") or ""
+    size = 0
+    cl = r.headers.get("Content-Length")
+    if cl and str(cl).isdigit():
+        size = int(cl)
+
+    name = _filename_from_content_disposition(cd) or _filename_from_url(final_url)
+    if looks_like_junk_name(name):
+        ext = _ext_from_content_type(ct)
+        if ext:
+            stem = os.path.splitext(name)[0] or "download"
+            name = stem + ext
+    return (_sanitize_name(name) if name else ""), size

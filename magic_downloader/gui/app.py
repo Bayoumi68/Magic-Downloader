@@ -49,6 +49,7 @@ class MagicDownloaderApp(tk.Tk):
         self.geometry("1200x700")
         self.minsize(960, 560)
         self.configure(bg=T.BG)
+        self._set_window_icon()
 
         self.manager = DownloadManager()
         self.manager.add_listener(self._schedule_refresh)
@@ -60,6 +61,7 @@ class MagicDownloaderApp(tk.Tk):
         self._tray = None
         self._tray_thread: object | None = None
         self._quitting = False
+        self._single_instance = None
         self._capture_queue: list[dict] = []
         self._capture_active = False
 
@@ -241,24 +243,10 @@ class MagicDownloaderApp(tk.Tk):
         self.cat_list.pack(fill=tk.BOTH, expand=True, padx=0, pady=0)
         self.cat_list.bind("<<ListboxSelect>>", self._on_category_select)
 
-        # Sidebar items: (display label, filter key)
-        self._sidebar_items: list[tuple[str, str]] = [
-            ("📥  All downloads", FILTER_ALL),
-            ("⬇  Downloading", FILTER_DOWNLOADING),
-            ("⏳  Queued", FILTER_QUEUED),
-            ("⏸  Paused", FILTER_PAUSED),
-            ("✅  Complete", FILTER_COMPLETE),
-            ("❌  Failed / Cancelled", FILTER_FAILED),
-            ("────────────", ""),
-            ("📁  General", FILTER_CAT_PREFIX + "General"),
-            ("📦  Compressed", FILTER_CAT_PREFIX + "Compressed"),
-            ("📄  Documents", FILTER_CAT_PREFIX + "Documents"),
-            ("🎵  Music", FILTER_CAT_PREFIX + "Music"),
-            ("🎬  Video", FILTER_CAT_PREFIX + "Video"),
-        ]
-        for label, _key in self._sidebar_items:
-            self.cat_list.insert(tk.END, label)
-        self.cat_list.selection_set(0)
+        # Sidebar items are built dynamically from the current categories.
+        self._sidebar_items: list[tuple[str, str]] = []
+        self._sidebar_sig: tuple | None = None
+        self._rebuild_sidebar()
 
         # Vertical separator
         tk.Frame(body, bg=T.BORDER, width=1).pack(side=tk.LEFT, fill=tk.Y)
@@ -429,6 +417,51 @@ class MagicDownloaderApp(tk.Tk):
 
     # ── filtering ───────────────────────────────────────────────────────
 
+    _CAT_ICONS = {
+        "General": "📁", "Compressed": "📦", "Documents": "📄",
+        "Music": "🎵", "Video": "🎬",
+    }
+
+    def _rebuild_sidebar(self) -> None:
+        """(Re)build the sidebar so it reflects the current categories,
+        including any the user added. Preserves the active filter."""
+        cats = list((self.manager.settings.get("category_paths") or {}).keys())
+        items: list[tuple[str, str]] = [
+            ("📥  All downloads", FILTER_ALL),
+            ("⬇  Downloading", FILTER_DOWNLOADING),
+            ("⏳  Queued", FILTER_QUEUED),
+            ("⏸  Paused", FILTER_PAUSED),
+            ("✅  Complete", FILTER_COMPLETE),
+            ("❌  Failed / Cancelled", FILTER_FAILED),
+            ("──  Categories  ──", ""),
+        ]
+        counts: dict[str, int] = {}
+        for j in self.manager.jobs:
+            counts[j.category] = counts.get(j.category, 0) + 1
+        for c in cats:
+            icon = self._CAT_ICONS.get(c, "📂")
+            n = counts.get(c, 0)
+            label = f"{icon}  {c}" + (f"  ({n})" if n else "")
+            items.append((label, FILTER_CAT_PREFIX + c))
+        # Show categories that have files but aren't in category_paths.
+        for c in sorted(counts):
+            if c not in cats:
+                items.append((f"📂  {c}  ({counts[c]})", FILTER_CAT_PREFIX + c))
+
+        self._sidebar_items = items
+        self._sidebar_sig = (tuple(cats), tuple(sorted(counts.items())))
+        self.cat_list.delete(0, tk.END)
+        for label, _key in items:
+            self.cat_list.insert(tk.END, label)
+        # Restore the selection matching the active filter.
+        for i, (_lbl, key) in enumerate(items):
+            if key == self._filter:
+                self.cat_list.selection_clear(0, tk.END)
+                self.cat_list.selection_set(i)
+                break
+        else:
+            self.cat_list.selection_set(0)
+
     def _on_category_select(self, _event=None) -> None:
         sel = self.cat_list.curselection()
         if not sel:
@@ -483,9 +516,19 @@ class MagicDownloaderApp(tk.Tk):
         self.after(400, self._tick)
 
     def _refresh_all(self) -> None:
+        self._maybe_rebuild_sidebar()
         self._refresh_tree()
         self._update_detail()
         self._update_status()
+
+    def _maybe_rebuild_sidebar(self) -> None:
+        cats = tuple((self.manager.settings.get("category_paths") or {}).keys())
+        counts: dict[str, int] = {}
+        for j in self.manager.jobs:
+            counts[j.category] = counts.get(j.category, 0) + 1
+        sig = (cats, tuple(sorted(counts.items())))
+        if sig != self._sidebar_sig:
+            self._rebuild_sidebar()
 
     def _selected_ids(self) -> list[str]:
         return list(self.tree.selection())
@@ -1062,23 +1105,39 @@ class MagicDownloaderApp(tk.Tk):
         self._start_browser_server()
 
     def _about(self) -> None:
+        from magic_downloader import __version__
+
         messagebox.showinfo(
             "About Magic Downloader",
-            "Magic Downloader 0.5\n\n"
-            "Multi-connection download manager inspired by IDM:\n"
+            f"Magic Downloader {__version__}\n\n"
+            "A fast, multi-connection download manager:\n"
             "• Segmented multi-part downloads\n"
             "• Pause / resume with partial files\n"
             "• Queue, categories, progress map, speed limit\n"
-            "• Video grabber: YouTube & ~1800 sites (yt-dlp) + HLS/DASH\n"
+            "• Video grabber: streaming (HLS/DASH) + many websites\n"
             "• All qualities & formats · merged to MP4 with ffmpeg\n"
             "• Browser extension: download button + video panel\n\n"
             "Install ffmpeg from Options → Video for clean merged MP4.\n\n"
-            "Not affiliated with Internet Download Manager. Only download\n"
-            "content you have the right to.",
+            "Please only download content you have the right to.",
             parent=self,
         )
 
     # ── system tray (IDM-style: close hides, only Exit quits) ────────────
+
+    def _set_window_icon(self) -> None:
+        """Set the title-bar / taskbar icon (and for child dialogs)."""
+        try:
+            from magic_downloader.paths import RESOURCE_ROOT, extension_dir
+
+            for ico in (
+                RESOURCE_ROOT / "browser_extension" / "icons" / "app.ico",
+                extension_dir() / "icons" / "app.ico",
+            ):
+                if ico.exists():
+                    self.iconbitmap(default=str(ico))
+                    return
+        except Exception:  # noqa: BLE001 — cosmetic only
+            pass
 
     def _tray_image(self):
         from PIL import Image
@@ -1115,6 +1174,19 @@ class MagicDownloaderApp(tk.Tk):
             self._tray_thread.start()
         except Exception as exc:  # noqa: BLE001 — no tray → close will just exit
             self._tray = None
+
+    # Single-instance control (called from the control-socket thread).
+    def _request_quit(self) -> None:
+        try:
+            self.after(0, self._quit)
+        except tk.TclError:
+            pass
+
+    def _request_show(self) -> None:
+        try:
+            self.after(0, self._restore_from_tray)
+        except tk.TclError:
+            pass
 
     # Tray callbacks run on the tray thread → marshal to the Tk main thread.
     def _tray_show(self, *_a) -> None:
@@ -1190,6 +1262,11 @@ class MagicDownloaderApp(tk.Tk):
             return
         self._quitting = True
         try:
+            if self._single_instance is not None:
+                self._single_instance.close()
+        except Exception:
+            pass
+        try:
             if self._tray is not None:
                 self._tray.stop()
         except Exception:
@@ -1206,7 +1283,16 @@ class MagicDownloaderApp(tk.Tk):
 def run_app() -> None:
     # When packaged as an exe, copy bundled resources to a stable writable dir.
     from magic_downloader.paths import sync_bundled_resources
+    from magic_downloader.single_instance import SingleInstance
 
     sync_bundled_resources()
+
+    # Single instance — "last one takes place": a new launch tells any running
+    # instance to quit and takes over.
+    si = SingleInstance()
+    si.acquire(takeover=True)
+
     app = MagicDownloaderApp()
+    app._single_instance = si
+    si.start_listener(on_quit=app._request_quit, on_show=app._request_show)
     app.mainloop()

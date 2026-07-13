@@ -254,7 +254,7 @@ class AddVideoDialog(tk.Toplevel):
         header.pack(fill=tk.X)
         header.pack_propagate(False)
         tk.Label(
-            header, text="  🎬  Download video (YouTube & 1800+ sites)", bg=T.BG_TOOLBAR,
+            header, text="  🎬  Download video", bg=T.BG_TOOLBAR,
             fg=T.FG_ON_DARK, font=T.FONT_TITLE, anchor="w",
         ).pack(fill=tk.BOTH, expand=True, padx=12)
 
@@ -519,9 +519,14 @@ class CaptureDialog(tk.Toplevel):
         cframe.grid(row=3, column=1, sticky="w", pady=7)
         ttk.Spinbox(cframe, from_=1, to=32, textvariable=self.conn_var, width=6).pack(side=tk.LEFT)
         info = spec.get("media_type", "http")
+        bits = []
         if is_stream:
             q = spec.get("media_meta", {}).get("quality") or (f"{spec['media_meta']['height']}p" if spec.get("media_meta", {}).get("height") else "best")
-            tk.Label(cframe, text=f"   {info.upper()} video · quality: {q}", bg=T.BG, fg=T.FG_MUTED, font=T.FONT_SMALL).pack(side=tk.LEFT)
+            bits.append(f"{info.upper()} video · {q}")
+        elif spec.get("size"):
+            bits.append(_human_size(spec["size"]))
+        if bits:
+            tk.Label(cframe, text="   " + "  ·  ".join(bits), bg=T.BG, fg=T.FG_MUTED, font=T.FONT_SMALL).pack(side=tk.LEFT)
 
         tk.Label(frm, text="URL:", bg=T.BG, fg=T.FG_MUTED, font=T.FONT_SMALL, anchor="w").grid(row=4, column=0, sticky="w", pady=(10, 0))
         tk.Label(frm, text=(spec.get("url") or "")[:80] + ("…" if len(spec.get("url") or "") > 80 else ""),
@@ -914,7 +919,7 @@ class SettingsDialog(tk.Toplevel):
             self.ffmpeg_status.configure(text=f"✅ Found: {found}", fg="#1a7a32")
         else:
             self.ffmpeg_status.configure(
-                text="⚠ Not found. Streaming/YouTube video will save as .ts or "
+                text="⚠ Not found. Streaming video will save as .ts or "
                 "separate files until ffmpeg is installed.",
                 fg=T.RED,
             )

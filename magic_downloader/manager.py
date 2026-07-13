@@ -8,7 +8,12 @@ from pathlib import Path
 from typing import Callable
 
 from magic_downloader.config import category_for_filename, load_settings, resolve_save_path, save_settings
-from magic_downloader.engine import DownloadEngine, suggest_filename
+from magic_downloader.engine import (
+    DownloadEngine,
+    looks_like_junk_name,
+    resolve_download_name,
+    suggest_filename,
+)
 from magic_downloader.media.detect import MediaKind, detect_kind
 from magic_downloader.media.media_engine import MediaDownloadEngine
 from magic_downloader.media.ytdlp_engine import YtdlpEngine
@@ -110,12 +115,32 @@ class DownloadManager:
         audio_only = bool(data.get("audio_only"))
         title = str(data.get("title") or "").strip()
 
+        cookie = str(data.get("cookie") or data.get("cookies") or "")
+        referrer = str(data.get("referrer") or data.get("referer") or data.get("page_url") or "")
+        extra = data.get("headers") or data.get("extra_headers") or {}
+        if not isinstance(extra, dict):
+            extra = {}
+
         raw_name = str(data.get("filename") or "").strip()
+        probe_size = 0
         if is_stream:
             base = _strip_ext(title or raw_name or "video")
             name = f"{base}.{'m4a' if audio_only else 'mp4'}"
         else:
             name = raw_name or suggest_filename(url)
+            # Junk name (GUID / no extension)? Ask the server for the real one.
+            if looks_like_junk_name(name):
+                try:
+                    resolved, size = resolve_download_name(
+                        url, cookie=cookie, referrer=referrer,
+                        user_agent=str(self.settings.get("user_agent") or ""),
+                    )
+                    if resolved and not looks_like_junk_name(resolved):
+                        name = resolved
+                    if size:
+                        probe_size = size
+                except Exception:  # noqa: BLE001 — best-effort
+                    pass
         for ch in '<>:"/\\|?*':
             name = name.replace(ch, "_")
         name = name.strip() or "download"
@@ -127,11 +152,6 @@ class DownloadManager:
         folder = str(Path(resolve_save_path(self.settings, name, category)).parent)
 
         connections = max(1, min(32, int(data.get("connections") or self.settings.get("connections") or 8)))
-        cookie = str(data.get("cookie") or data.get("cookies") or "")
-        referrer = str(data.get("referrer") or data.get("referer") or data.get("page_url") or "")
-        extra = data.get("headers") or data.get("extra_headers") or {}
-        if not isinstance(extra, dict):
-            extra = {}
 
         media_meta: dict = {}
         if is_stream:
@@ -170,6 +190,7 @@ class DownloadManager:
             "is_stream": is_stream,
             "audio_only": audio_only,
             "title": title,
+            "size": probe_size,
         }
 
     def add_capture_confirmed(
