@@ -1,0 +1,383 @@
+/**
+ * Magic Downloader — on-page controls (the visible "IDM" experience).
+ *
+ *  • A "⬇ Download" button appears on every <video> player (top-right).
+ *  • A floating action button (bottom-right) shows how many videos/streams the
+ *    extension sniffed on this page.
+ *  • Clicking either opens a panel listing the real media (HLS/DASH/MP4/…) with
+ *    a Download button per item — sent straight to the desktop app.
+ */
+
+(function () {
+  if (window.__magicDownloaderInjected) return;
+  window.__magicDownloaderInjected = true;
+
+  const ROOT_ID = "magic-downloader-root";
+  const MIN_VIDEO_W = 160;
+  const MIN_VIDEO_H = 90;
+
+  let appOnline = false;
+  let appHasFfmpeg = true;
+  let cfg = { enabled: true, showVideoButton: true };
+  const videoOverlays = new Map(); // videoEl -> button
+
+  // ── messaging ─────────────────────────────────────────────────────────
+  // Firefox = promise-based `browser`; Chrome/Edge MV3 = promise-based `chrome`.
+  const B = (typeof browser !== "undefined" && browser) || chrome;
+  function msg(payload) {
+    return new Promise((resolve) => {
+      try {
+        const p = B.runtime.sendMessage(payload);
+        if (p && typeof p.then === "function") {
+          p.then((res) => resolve(res || { ok: false })).catch(() => resolve({ ok: false }));
+        } else {
+          resolve({ ok: false });
+        }
+      } catch (_) {
+        resolve({ ok: false });
+      }
+    });
+  }
+  const ping = () => msg({ type: "ping" });
+  const getConfig = () => msg({ type: "getConfig" });
+  const getMedia = () => msg({ type: "getMedia" });
+  const downloadMedia = (item, sel) => msg({ type: "downloadMedia", item, sel });
+  const sendUrl = (url, opts) => msg({ type: "add", url, opts });
+
+  // Tell the background this page is showing a video → enables the yt-dlp
+  // "download this page's video" path (the only thing that works on YouTube).
+  let lastReported = "";
+  function reportPageVideo() {
+    const key = location.href + "|" + document.title;
+    if (key === lastReported) return;
+    lastReported = key;
+    msg({ type: "reportPageVideo", pageUrl: location.href, title: document.title });
+  }
+
+  function guessName(url) {
+    try {
+      const u = new URL(url, location.href);
+      const last = u.pathname.split("/").filter(Boolean).pop() || "download";
+      return decodeURIComponent(last.split("?")[0]) || "download";
+    } catch {
+      return "download";
+    }
+  }
+
+  // ── shared panel ──────────────────────────────────────────────────────
+  let panel = null;
+
+  function buildPanel(root) {
+    panel = document.createElement("div");
+    panel.id = "md-panel";
+    panel.innerHTML = `
+      <h3>Magic Downloader <button class="md-close" title="Close">×</button></h3>
+      <div id="md-status" class="md-status">Checking app…</div>
+      <div id="md-list"></div>
+    `;
+    root.appendChild(panel);
+    panel.querySelector(".md-close").addEventListener("click", () => closePanel());
+    panel.addEventListener("click", (e) => e.stopPropagation());
+  }
+
+  function openPanel() {
+    if (!panel) return;
+    panel.classList.add("md-open");
+    refreshStatus();
+    renderList();
+  }
+  function closePanel() {
+    if (panel) panel.classList.remove("md-open");
+  }
+  function togglePanel() {
+    if (!panel) return;
+    if (panel.classList.contains("md-open")) closePanel();
+    else openPanel();
+  }
+
+  async function refreshStatus() {
+    const el = panel && panel.querySelector("#md-status");
+    if (!el) return;
+    const res = await ping();
+    appOnline = !!res.ok;
+    appHasFfmpeg = res.ffmpeg !== false;
+    if (res.ok) {
+      el.textContent = `Connected · port ${res.port || "7373"}${
+        res.ffmpeg === false ? " · ⚠ ffmpeg missing (streams save as .ts)" : ""
+      }`;
+      el.className = "md-status ok";
+    } else {
+      el.textContent = "App not running. Start Magic Downloader on your PC.";
+      el.className = "md-status bad";
+    }
+    updateFab();
+  }
+
+  function mediaLabel(item) {
+    if (item.kind === "page") return "This page's video · pick quality in the popup";
+    if (item.kind === "hls") return "HLS stream (adaptive quality)";
+    if (item.kind === "dash") return "DASH stream (adaptive quality)";
+    const size = item.size ? ` · ${humanSize(item.size)}` : "";
+    return `${item.ext ? item.ext.toUpperCase() : "FILE"}${size}`;
+  }
+
+  function humanSize(n) {
+    if (!n) return "";
+    const u = ["B", "KB", "MB", "GB"];
+    let i = 0;
+    let v = n;
+    while (v >= 1024 && i < u.length - 1) {
+      v /= 1024;
+      i++;
+    }
+    return `${v.toFixed(i ? 1 : 0)} ${u[i]}`;
+  }
+
+  async function renderList(extraItems) {
+    const listEl = panel && panel.querySelector("#md-list");
+    if (!listEl) return;
+    const res = await getMedia();
+    let items = (res && res.items) || [];
+    if (extraItems && extraItems.length) {
+      const seen = new Set(items.map((i) => i.url));
+      for (const ex of extraItems) if (!seen.has(ex.url)) items.push(ex);
+    }
+    listEl.innerHTML = "";
+    if (!items.length) {
+      const empty = document.createElement("div");
+      empty.className = "md-empty";
+      empty.textContent =
+        "No video detected yet. Press ▶ Play on the video, then reopen — the stream shows up as it loads.";
+      listEl.appendChild(empty);
+      return;
+    }
+    for (const item of items) {
+      listEl.appendChild(renderItem(item));
+    }
+  }
+
+  function renderItem(item) {
+    const row = document.createElement("div");
+    row.className = "md-item";
+    const kind = item.kind === "file" ? "file" : item.kind;
+    const displayName = item.title || item.name || guessName(item.url);
+    row.innerHTML = `
+      <span class="md-kind ${kind}">${(item.kind || "file").toUpperCase()}</span>
+      <div class="md-meta">
+        <div class="md-name" title="${escapeHtml(item.url)}">${escapeHtml(displayName)}</div>
+        <div class="md-sub">${escapeHtml(mediaLabel(item))}</div>
+      </div>
+      <button class="md-get" type="button">Download</button>
+    `;
+    const btn = row.querySelector(".md-get");
+    btn.addEventListener("click", async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      btn.textContent = "…";
+      btn.disabled = true;
+      const res = await downloadMedia(item);
+      btn.textContent = res && res.ok ? "Queued ✓" : "Failed";
+      const st = panel.querySelector("#md-status");
+      if (res && res.ok) {
+        st.textContent = `Queued: ${res.filename || displayName}`;
+        st.className = "md-status ok";
+      } else {
+        st.textContent = `Failed: ${(res && res.error) || "is the app running?"}`;
+        st.className = "md-status bad";
+      }
+      setTimeout(() => {
+        btn.textContent = "Download";
+        btn.disabled = false;
+      }, 1800);
+    });
+    return row;
+  }
+
+  function escapeHtml(s) {
+    return (s || "").replace(/[&<>"']/g, (c) =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])
+    );
+  }
+
+  // ── floating action button ────────────────────────────────────────────
+  let fab = null;
+
+  function buildFab(root) {
+    fab = document.createElement("button");
+    fab.id = "md-fab";
+    fab.type = "button";
+    fab.title = "Magic Downloader — click to see detected videos";
+    fab.classList.add("offline");
+    fab.innerHTML = `⬇ MD <span class="md-fab-count" style="display:none"></span>`;
+    root.appendChild(fab);
+    fab.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      togglePanel();
+    });
+  }
+
+  async function updateFab() {
+    if (!fab) return;
+    fab.classList.toggle("offline", !appOnline);
+    const res = await getMedia();
+    const count = ((res && res.items) || []).length;
+    const badge = fab.querySelector(".md-fab-count");
+    if (count > 0) {
+      badge.textContent = count;
+      badge.style.display = "inline-block";
+    } else {
+      badge.style.display = "none";
+    }
+  }
+
+  // ── per-<video> overlay button ────────────────────────────────────────
+  function videoDirectItem(video) {
+    // If the video element exposes a real http(s) src, offer it directly so
+    // the button works even before/without network sniffing.
+    let src = video.currentSrc || video.src || "";
+    if (!src) {
+      const source = video.querySelector("source[src]");
+      if (source) src = source.src;
+    }
+    if (!src || !/^https?:\/\//i.test(src)) return null; // blob:/mediasource → rely on sniffing
+    return {
+      url: src,
+      kind: /\.m3u8/i.test(src) ? "hls" : /\.mpd/i.test(src) ? "dash" : "file",
+      mclass: "video",
+      ext: (guessName(src).split(".").pop() || "").toLowerCase(),
+      name: guessName(src),
+      title: document.title || "",
+      pageUrl: location.href,
+      size: 0,
+    };
+  }
+
+  function ensureOverlay(video) {
+    if (videoOverlays.has(video)) return videoOverlays.get(video);
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "md-video-overlay";
+    btn.innerHTML = `⬇ Download <span class="md-badge" style="display:none"></span>`;
+    document.documentElement.appendChild(btn);
+    btn.addEventListener("click", async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const direct = videoDirectItem(video);
+      openPanel();
+      renderList(direct ? [direct] : []);
+    });
+    videoOverlays.set(video, btn);
+    return btn;
+  }
+
+  function positionOverlay(video, btn) {
+    const rect = video.getBoundingClientRect();
+    const visible =
+      rect.width >= MIN_VIDEO_W &&
+      rect.height >= MIN_VIDEO_H &&
+      rect.bottom > 0 &&
+      rect.right > 0 &&
+      rect.top < window.innerHeight &&
+      rect.left < window.innerWidth;
+    if (!visible) {
+      btn.classList.remove("md-show");
+      return;
+    }
+    btn.classList.add("md-show");
+    const top = Math.max(6, rect.top + 8);
+    const left = Math.min(window.innerWidth - 130, rect.right - 128);
+    btn.style.top = `${top}px`;
+    btn.style.left = `${Math.max(6, left)}px`;
+  }
+
+  async function refreshOverlays() {
+    if (!cfg.enabled || cfg.showVideoButton === false) {
+      for (const [, btn] of videoOverlays) btn.remove();
+      videoOverlays.clear();
+      return 0;
+    }
+    const videos = Array.from(document.querySelectorAll("video"));
+    if (videos.length) reportPageVideo();
+    // Drop overlays for removed videos.
+    for (const [vid, btn] of [...videoOverlays.entries()]) {
+      if (!videos.includes(vid) || !document.contains(vid)) {
+        btn.remove();
+        videoOverlays.delete(vid);
+      }
+    }
+    let count = 0;
+    const res = await getMedia();
+    const streamCount = ((res && res.items) || []).length;
+    for (const video of videos) {
+      const btn = ensureOverlay(video);
+      positionOverlay(video, btn);
+      const badge = btn.querySelector(".md-badge");
+      if (streamCount > 0) {
+        badge.textContent = streamCount;
+        badge.style.display = "inline-block";
+      } else {
+        badge.style.display = "none";
+      }
+      count++;
+    }
+    return count;
+  }
+
+  function repositionAll() {
+    for (const [video, btn] of videoOverlays.entries()) positionOverlay(video, btn);
+  }
+
+  // ── boot ──────────────────────────────────────────────────────────────
+  async function build() {
+    if (document.getElementById(ROOT_ID)) return;
+    try {
+      const c = await getConfig();
+      if (c && typeof c === "object") cfg = { ...cfg, ...c };
+    } catch (_) {
+      /* use defaults */
+    }
+    if (cfg.enabled === false) return; // extension turned off in popup
+
+    const cfgHost = document.createElement("div");
+    cfgHost.id = ROOT_ID;
+    document.documentElement.appendChild(cfgHost);
+
+    buildPanel(cfgHost);
+    buildFab(cfgHost);
+
+    document.addEventListener("click", (e) => {
+      const root = document.getElementById(ROOT_ID);
+      if (root && !root.contains(e.target)) closePanel();
+    }, true);
+
+    window.addEventListener("scroll", repositionAll, true);
+    window.addEventListener("resize", repositionAll, true);
+
+    // Observe DOM for dynamically added <video> players.
+    const mo = new MutationObserver(() => scheduleOverlayRefresh());
+    mo.observe(document.documentElement, { childList: true, subtree: true });
+
+    refreshStatus();
+    refreshOverlays();
+    setInterval(() => {
+      refreshOverlays();
+      updateFab();
+    }, 1500);
+  }
+
+  let overlayTimer = null;
+  function scheduleOverlayRefresh() {
+    if (overlayTimer) return;
+    overlayTimer = setTimeout(() => {
+      overlayTimer = null;
+      refreshOverlays();
+    }, 400);
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", build);
+  } else {
+    build();
+  }
+})();

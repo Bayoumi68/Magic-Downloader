@@ -1,0 +1,159 @@
+/* Magic Downloader — on-page UI (isolated, high z-index, !important to survive
+   hostile site styles). */
+
+#magic-downloader-root,
+.md-video-overlay,
+#md-panel {
+  font-family: "Segoe UI", system-ui, sans-serif !important;
+}
+
+/* Floating action button (bottom-right) */
+#md-fab {
+  position: fixed !important;
+  right: 18px !important;
+  bottom: 18px !important;
+  z-index: 2147483646 !important;
+  min-width: 52px !important;
+  height: 52px !important;
+  padding: 0 12px !important;
+  border-radius: 26px !important;
+  border: none !important;
+  background: #2b579a !important;
+  color: #fff !important;
+  font-size: 13px !important;
+  font-weight: 700 !important;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35) !important;
+  cursor: pointer !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 6px !important;
+  line-height: 1 !important;
+}
+#md-fab:hover { background: #1e3f73 !important; }
+#md-fab.offline { background: #7a8694 !important; }
+#md-fab .md-fab-count {
+  background: #ffcf33 !important;
+  color: #333 !important;
+  border-radius: 10px !important;
+  padding: 1px 7px !important;
+  font-size: 12px !important;
+  font-weight: 800 !important;
+}
+
+/* "Download video" button anchored on top of a <video> */
+.md-video-overlay {
+  position: fixed !important;
+  z-index: 2147483640 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  padding: 6px 10px !important;
+  border: none !important;
+  border-radius: 6px !important;
+  background: rgba(43, 87, 154, 0.95) !important;
+  color: #fff !important;
+  font-size: 12px !important;
+  font-weight: 700 !important;
+  cursor: pointer !important;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4) !important;
+  opacity: 0 !important;
+  transition: opacity 0.15s ease !important;
+  pointer-events: auto !important;
+  white-space: nowrap !important;
+}
+.md-video-overlay.md-show { opacity: 0.92 !important; }
+.md-video-overlay.md-show:hover { opacity: 1 !important; background: #1e3f73 !important; }
+.md-video-overlay .md-badge {
+  background: #ffcf33 !important;
+  color: #333 !important;
+  border-radius: 8px !important;
+  padding: 0 6px !important;
+  font-size: 11px !important;
+  font-weight: 800 !important;
+}
+
+/* Shared panel listing detected media */
+#md-panel {
+  position: fixed !important;
+  right: 18px !important;
+  bottom: 80px !important;
+  z-index: 2147483647 !important;
+  width: 340px !important;
+  max-height: 70vh !important;
+  overflow: auto !important;
+  background: #ffffff !important;
+  color: #1a1a1a !important;
+  border-radius: 10px !important;
+  box-shadow: 0 10px 34px rgba(0, 0, 0, 0.32) !important;
+  border: 1px solid #c5d0dc !important;
+  padding: 12px 14px !important;
+  display: none !important;
+}
+#md-panel.md-open { display: block !important; }
+#md-panel h3 {
+  margin: 0 0 6px 0 !important;
+  font-size: 14px !important;
+  color: #2b579a !important;
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+}
+#md-panel .md-close {
+  cursor: pointer !important;
+  color: #8894a4 !important;
+  font-size: 16px !important;
+  font-weight: 700 !important;
+  background: none !important;
+  border: none !important;
+}
+#md-panel .md-status {
+  font-size: 12px !important;
+  padding: 6px 8px !important;
+  border-radius: 6px !important;
+  background: #f0f4f8 !important;
+  margin: 4px 0 10px !important;
+}
+#md-panel .md-status.ok { background: #e6f6ea !important; color: #1a7a32 !important; }
+#md-panel .md-status.bad { background: #fdecea !important; color: #c0392b !important; }
+#md-panel .md-empty { font-size: 12px !important; color: #5a6a7a !important; padding: 8px 0 !important; }
+.md-item {
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  padding: 8px 6px !important;
+  border-top: 1px solid #eef2f6 !important;
+}
+.md-item .md-meta { flex: 1 1 auto !important; min-width: 0 !important; }
+.md-item .md-name {
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  color: #22303c !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+.md-item .md-sub { font-size: 11px !important; color: #6b7a89 !important; }
+.md-kind {
+  font-size: 10px !important;
+  font-weight: 800 !important;
+  padding: 1px 6px !important;
+  border-radius: 4px !important;
+  color: #fff !important;
+}
+.md-kind.page { background: #1a7a32 !important; }
+.md-kind.hls { background: #c0392b !important; }
+.md-kind.dash { background: #8e44ad !important; }
+.md-kind.file { background: #2b579a !important; }
+.md-item button.md-get {
+  flex: 0 0 auto !important;
+  padding: 6px 10px !important;
+  border: none !important;
+  border-radius: 6px !important;
+  background: #2b579a !important;
+  color: #fff !important;
+  font-size: 12px !important;
+  font-weight: 700 !important;
+  cursor: pointer !important;
+}
+.md-item button.md-get:hover { background: #1e3f73 !important; }

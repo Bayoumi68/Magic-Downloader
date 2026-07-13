@@ -1,0 +1,123 @@
+========================================================
+  Magic Downloader — HOW TO SEE DOWNLOADS ON WEBSITES
+========================================================
+
+Nothing appears on websites until you install the browser
+extension. The desktop app alone is not enough.
+
+Do these steps once:
+
+--------------------------------------------------------
+STEP 1 — Start Magic Downloader
+--------------------------------------------------------
+  Run:  python main.py
+  Look for green text:  Browser: :7373
+
+--------------------------------------------------------
+STEP 2 — Install the extension (Chrome / Edge / Brave)
+--------------------------------------------------------
+  1. Copy this folder path:
+
+     E:\PycharmProjects\Magic_downloader\browser_extension
+
+  2. Open your browser and go to:
+
+     Chrome / Brave →  chrome://extensions
+     Edge           →  edge://extensions
+
+  3. Turn ON  "Developer mode"  (top-right switch)
+
+  4. Click  "Load unpacked"
+
+  5. Paste the folder path above and select that folder
+
+  6. You should see "Magic Downloader" in the extensions list
+     Pin it to the toolbar (puzzle icon → pin)
+
+  NOTE: In Chrome/Edge/Brave this "Load unpacked" extension
+  stays installed permanently. No signing, no account.
+
+--------------------------------------------------------
+STEP 2 (Firefox) — Install the extension permanently
+--------------------------------------------------------
+  IMPORTANT: normal Firefox (Release/Beta) REFUSES to keep an
+  unsigned add-on installed, and that cannot be turned off.
+  (That is why IDM's Firefox add-on is signed on Mozilla's
+  store.) To keep it WITHOUT signing in or signing anything,
+  use a Firefox build that lets you disable signing:
+
+  1. DOWNLOAD and INSTALL Firefox Developer Edition (this is a
+     separate Firefox app; it installs next to your normal
+     Firefox and does NOT replace it):
+       https://www.mozilla.org/firefox/developer/
+       (that web page only has a Download button)
+     -> run the installer, then OPEN Firefox Developer Edition.
+     (Nightly or ESR work too.)
+
+  2. about:config is NOT a website. It is a page INSIDE Firefox.
+     In the OPEN Firefox Developer Edition, click the ADDRESS BAR
+     (the box at the top where you type google.com), type:
+
+         about:config
+
+     press Enter, click "Accept the Risk and Continue", then
+     Search for:   xpinstall.signatures.required
+     Double-click it so its value becomes:   false
+
+  3. In that SAME address bar type:   about:addons   (Enter)
+     Click the gear icon (top-right) ->
+       "Install Add-on From File..."
+
+  4. Select this file:
+
+       E:\PycharmProjects\Magic_downloader\magic_downloader_extension.xpi
+
+  5. Click "Add". It now stays installed across restarts.
+
+  6. Grant website access (Firefox makes this opt-in):
+     Toolbar puzzle/extensions menu -> Magic Downloader ->
+       Permissions -> allow "Access your data for all websites".
+
+  NOTE: In NORMAL Firefox this is impossible without signing.
+  If you want to stay on normal Firefox, it must be signed by
+  Mozilla first (free) - see FIREFOX_INSTALL.md, Option B.
+
+--------------------------------------------------------
+STEP 3 — What you should see on websites
+--------------------------------------------------------
+  After install, open ANY normal website (not chrome:// pages):
+
+  • YOUTUBE (and most video sites): click the extension TOOLBAR
+    ICON -> the popup shows "This page's video" with a quality
+    dropdown (every format) -> pick one -> it downloads here
+  • On sites with a plain <video>: press Play, then a blue
+    "⬇ Download" button appears on the top-right of the player
+  • The toolbar icon shows a number badge = videos found
+  • Right-click any link → "Download with Magic Downloader"
+
+  Tiny junk files (thumbnails, UI sounds) are now ignored, so
+  you get the actual video — not a 6 KB "no_input.mp3".
+
+--------------------------------------------------------
+STEP 4 (recommended for video) — install ffmpeg
+--------------------------------------------------------
+  Streaming video comes as separate video + audio pieces.
+  ffmpeg merges them into ONE clean .mp4.
+
+  • Download ffmpeg, add its folder to your Windows PATH
+    (or drop ffmpeg.exe into a "bin" folder next to main.py)
+  • The extension popup shows whether ffmpeg was found
+  • Without ffmpeg: HLS saves as .ts, DASH saves video and
+    audio as separate files (still playable, just not merged)
+
+--------------------------------------------------------
+If you still see nothing
+--------------------------------------------------------
+  • Extension not installed / not enabled
+  • You are on chrome:// or edge:// pages (extensions blocked)
+  • Refresh the webpage after installing, then press Play
+  • The video hasn't started — streams load only when you Play
+  • Click the extension icon → must say "Connected"
+    If not: start Magic Downloader first
+
+========================================================

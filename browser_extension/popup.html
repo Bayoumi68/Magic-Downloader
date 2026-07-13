@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Magic Downloader</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      width: 390px;
+      margin: 0;
+      font: 13px/1.4 "Segoe UI", system-ui, sans-serif;
+      color: #1a1a1a;
+      background: #f5f7fa;
+    }
+    header {
+      background: #2b579a;
+      color: #fff;
+      padding: 12px 14px;
+      font-weight: 600;
+      font-size: 14px;
+    }
+    header span { opacity: 0.85; font-weight: 400; font-size: 11px; display: block; margin-top: 2px; }
+    .body { padding: 12px 14px 14px; }
+    .status {
+      display: flex; align-items: center; gap: 8px;
+      padding: 8px 10px; border-radius: 6px;
+      background: #fff; border: 1px solid #d0d7e0; margin-bottom: 12px;
+    }
+    .dot { width: 10px; height: 10px; border-radius: 50%; background: #c0392b; flex-shrink: 0; }
+    .dot.ok { background: #2e9b3a; }
+    .section-title {
+      font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em;
+      color: #5a6a7a; margin: 4px 0 6px; font-weight: 700;
+    }
+    #mediaList { margin-bottom: 8px; }
+    .empty { font-size: 12px; color: #6b7a89; padding: 10px 4px; }
+    .item {
+      display: flex; align-items: center; gap: 8px;
+      padding: 8px 4px; border-top: 1px solid #eef2f6;
+    }
+    .item:first-child { border-top: none; }
+    .kind {
+      font-size: 10px; font-weight: 800; padding: 1px 6px; border-radius: 4px; color: #fff;
+    }
+    .kind.page { background: #1a7a32; }
+    .kind.hls { background: #c0392b; }
+    .kind.dash { background: #8e44ad; }
+    .kind.file { background: #2b579a; }
+    .meta { flex: 1 1 auto; min-width: 0; }
+    .name {
+      font-size: 12px; font-weight: 600; color: #22303c;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .sub { font-size: 11px; color: #6b7a89; }
+    /* rich format list */
+    .item-block { border-top: 1px solid #eef2f6; padding: 8px 2px; }
+    .item-block:first-child { border-top: none; }
+    .formats {
+      margin-top: 6px; max-height: 240px; overflow-y: auto;
+      border: 1px solid #e2e8ef; border-radius: 6px; background: #fff;
+    }
+    .floading { padding: 9px 10px; font-size: 12px; color: #6b7a89; }
+    .fmt {
+      display: flex; align-items: center; gap: 8px;
+      padding: 7px 9px; border-top: 1px solid #f0f4f8;
+    }
+    .fmt:first-child { border-top: none; }
+    .fmt:hover { background: #f4f8fd; }
+    .fq { font-weight: 700; font-size: 12px; color: #22303c; min-width: 66px; }
+    .fmeta {
+      flex: 1 1 auto; font-size: 11px; color: #6b7a89;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .fmeta .ff { color: #b9770a; }
+    .fmeta .fa { color: #1a7a32; }
+    .fdl {
+      flex: 0 0 auto; min-width: 32px; height: 27px; border: none;
+      border-radius: 5px; background: #2b579a; color: #fff; font-size: 13px;
+      font-weight: 700; cursor: pointer;
+    }
+    .fdl:hover { background: #1e3f73; }
+    .fdl:disabled { background: #9aa8ba; cursor: default; }
+    button.get {
+      padding: 6px 10px; border: none; border-radius: 6px;
+      background: #2b579a; color: #fff; font-size: 12px; font-weight: 700; cursor: pointer;
+    }
+    button.get:hover { background: #1e3f73; }
+    button.get:disabled { background: #9aa8ba; cursor: default; }
+    details.settings { margin-top: 12px; border-top: 1px solid #e2e8ef; padding-top: 8px; }
+    details.settings summary { cursor: pointer; color: #2b579a; font-weight: 600; font-size: 12px; }
+    label.row { display: flex; align-items: center; gap: 8px; margin: 8px 0; cursor: pointer; }
+    label.field {
+      display: block; margin: 10px 0 4px; color: #5a6a7a; font-size: 11px;
+      text-transform: uppercase; letter-spacing: 0.03em;
+    }
+    input[type="number"], input[type="text"] {
+      width: 100%; padding: 7px 8px; border: 1px solid #b8c4d0; border-radius: 4px; font: inherit;
+    }
+    .btn-wide {
+      width: 100%; margin-top: 10px; padding: 9px; border: none; border-radius: 4px;
+      background: #2b579a; color: #fff; font: inherit; font-weight: 600; cursor: pointer;
+    }
+    .btn-wide:hover { background: #1e3f73; }
+    .btn-wide.secondary { background: #fff; color: #2b579a; border: 1px solid #2b579a; margin-top: 8px; }
+    .hint { color: #5a6a7a; font-size: 11px; margin-top: 10px; }
+    code { background: #e8eef5; padding: 1px 4px; border-radius: 3px; }
+    .warn { color: #b9770a; font-size: 11px; margin-top: 6px; }
+  </style>
+</head>
+<body>
+  <header>
+    Magic Downloader
+    <span>Video grabber · multi-connection downloads</span>
+  </header>
+  <div class="body">
+    <div class="status">
+      <div class="dot" id="dot"></div>
+      <div style="flex:1 1 auto; min-width:0">
+        <div id="statusText">Checking app…</div>
+        <div class="hint" id="statusDetail" style="margin:0"></div>
+      </div>
+      <button class="get" id="recheck" style="background:#eef2f8;color:#2b579a">↻</button>
+    </div>
+
+    <div class="section-title">Videos & media on this page</div>
+    <div id="mediaList"><div class="empty">Scanning…</div></div>
+    <div class="warn" id="ffmpegWarn" style="display:none">
+      ⚠ ffmpeg not found — merged video+audio needs it. Streams will save as .ts
+      or separate files. Install ffmpeg and add it to PATH for clean .mp4.
+    </div>
+
+    <details class="settings">
+      <summary>Settings</summary>
+      <label class="row"><input type="checkbox" id="enabled" /> Extension enabled</label>
+      <label class="row"><input type="checkbox" id="showVideoButton" /> Show “Download” button on video players</label>
+      <label class="row"><input type="checkbox" id="captureDownloads" /> Capture normal browser downloads (like IDM)</label>
+
+      <label class="field" for="port">API port</label>
+      <input type="number" id="port" min="1024" max="65535" />
+
+      <label class="field" for="token">API token (optional)</label>
+      <input type="text" id="token" placeholder="Leave empty if not set in app" />
+
+      <button class="btn-wide" id="save">Save settings</button>
+      <p class="hint">
+        Right-click a link → <strong>Download with Magic Downloader</strong>.<br />
+        App must be running with Browser API on <code>127.0.0.1</code>.
+      </p>
+    </details>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>
