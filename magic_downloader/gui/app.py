@@ -167,24 +167,25 @@ class MagicDownloaderApp(tk.Tk):
         self.config(menu=menubar)
 
     def _build_toolbar(self) -> None:
-        bar = tk.Frame(self, bg=T.BG_TOOLBAR, height=84)
+        bar = tk.Frame(self, bg=T.BG_TOOLBAR, height=76)
         bar.pack(fill=tk.X)
         bar.pack_propagate(False)
 
-        # Brand: the app logo (falls back to text if the image can't load).
+        # Brand: emblem + "Magic Downloader" wordmark side-by-side (falls back
+        # to a text label if the images can't load).
         brand = tk.Frame(bar, bg=T.BG_TOOLBAR)
-        brand.pack(side=tk.LEFT, padx=(12, 10), pady=6)
-        self._brand_logo = self._load_brand_logo(74)
-        if self._brand_logo is not None:
-            tk.Label(brand, image=self._brand_logo, bg=T.BG_TOOLBAR).pack()
-        else:
+        brand.pack(side=tk.LEFT, padx=(12, 12), pady=6)
+        self._brand_emblem = self._load_brand_image("logo_toolbar.png", 54,
+                                                     fallbacks=("icons/icon128.png",))
+        self._brand_word = self._load_brand_image("logo_wordmark.png", 46)
+        if self._brand_emblem is not None:
+            tk.Label(brand, image=self._brand_emblem, bg=T.BG_TOOLBAR).pack(side=tk.LEFT)
+        if self._brand_word is not None:
+            tk.Label(brand, image=self._brand_word, bg=T.BG_TOOLBAR).pack(side=tk.LEFT, padx=(9, 0))
+        if self._brand_emblem is None and self._brand_word is None:
             tk.Label(
-                brand,
-                text="Magic\nDownloader",
-                bg=T.BG_TOOLBAR,
-                fg=T.FG_ON_DARK,
-                font=("Segoe UI", 10, "bold"),
-                justify=tk.LEFT,
+                brand, text="Magic Downloader", bg=T.BG_TOOLBAR,
+                fg=T.FG_ON_DARK, font=("Segoe UI", 13, "bold"),
             ).pack()
 
         sep = tk.Frame(bar, bg="#1e3f73", width=1)
@@ -1380,25 +1381,23 @@ class MagicDownloaderApp(tk.Tk):
 
     # ── system tray (IDM-style: close hides, only Exit quits) ────────────
 
-    def _load_brand_logo(self, height: int):
-        """Load + scale the app logo (logo.png, else the app icon) for the
-        toolbar brand. Returns a PhotoImage, or None if it can't be loaded."""
+    def _load_brand_image(self, filename: str, height: int, fallbacks=()):
+        """Load + scale a bundled brand image (RESOURCE_ROOT/<filename>) to the
+        given height, trimming transparent margins. ``fallbacks`` are extra
+        paths (relative to the extension dir) to try. PhotoImage, or None."""
         try:
             from PIL import Image, ImageTk
 
             from magic_downloader.paths import RESOURCE_ROOT, extension_dir
 
-            for p in (
-                RESOURCE_ROOT / "logo_toolbar.png",   # pre-cropped emblem (best)
-                extension_dir() / "icons" / "icon128.png",
-                RESOURCE_ROOT / "browser_extension" / "icons" / "icon128.png",
-                RESOURCE_ROOT / "logo.png",
-            ):
+            candidates = [RESOURCE_ROOT / filename]
+            for fb in fallbacks:
+                candidates.append(extension_dir() / fb)
+                candidates.append(RESOURCE_ROOT / "browser_extension" / fb)
+            for p in candidates:
                 try:
                     if p.exists():
                         im = Image.open(p).convert("RGBA")
-                        # Trim transparent margins so the emblem fills the space
-                        # (the full logo.png has lots of padding around it).
                         box = im.split()[3].point(lambda a: 255 if a > 25 else 0).getbbox()
                         if box:
                             im = im.crop(box)
