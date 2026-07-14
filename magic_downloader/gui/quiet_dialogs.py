@@ -136,8 +136,13 @@ def _message(icon, title, message, parent, buttons):
             win.destroy()
         return ttk.Button(row, text=label, command=_cb)
 
+    # Right-align the button group but keep the buttons in the SAME left-to-right
+    # order as the `buttons` list (affirmative first) — matching the native
+    # Windows dialog layout, e.g. [Yes] [No]. Packing side=RIGHT in list order
+    # would reverse them to [No] [Yes], making users click the wrong button, so
+    # we pack the list in reverse.
     default_btn = None
-    for label, value, is_default in buttons:  # rightmost = first listed
+    for label, value, is_default in reversed(buttons):
         b = _make(label, value)
         b.pack(side=tk.RIGHT, padx=4)
         if is_default:

@@ -55,6 +55,9 @@ class MagicDownloaderApp(tk.Tk):
             self.tk.eval("catch {rename bell {}}; proc bell args {}")
         except tk.TclError:
             pass
+        # Log any exception raised inside a Tk callback (invisible otherwise in
+        # the console-less frozen app) so silent failures can be diagnosed.
+        self.report_callback_exception = self._log_tk_exception
         self.title("Magic Downloader — Multi-connection Download Manager")
         self.geometry("1200x700")
         self.minsize(960, 560)
@@ -1095,6 +1098,19 @@ class MagicDownloaderApp(tk.Tk):
     def _cancel_selected(self) -> None:
         for jid in self._selected_ids():
             self.manager.cancel_job(jid)
+
+    def _log_tk_exception(self, exc, val, tb) -> None:
+        """Record any exception raised inside a Tk callback to error.log — the
+        frozen app has no console, so these would otherwise vanish silently."""
+        try:
+            import datetime
+            import traceback
+            from magic_downloader.paths import DATA_DIR
+            with open(DATA_DIR / "error.log", "a", encoding="utf-8") as f:
+                f.write(f"\n[{datetime.datetime.now():%Y-%m-%d %H:%M:%S}]\n")
+                f.write("".join(traceback.format_exception(exc, val, tb)))
+        except Exception:
+            pass
 
     def _delete_selected(self) -> None:
         ids = self._selected_ids()
