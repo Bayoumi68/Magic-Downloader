@@ -23,10 +23,11 @@ DisableDirPage=no
 UsePreviousAppDir=no
 UninstallDisplayIcon={app}\{#MyAppExeName}
 UninstallDisplayName={#MyAppName}
-; Close a running Magic Downloader before installing so the .exe can be
-; replaced (otherwise an upgrade over a running/tray instance keeps the old
-; files → "installed the old version").
-CloseApplications=yes
+; DON'T use Inno's Restart Manager: it asks the app to close gracefully, which
+; Magic Downloader treats as "hide to tray" (it never exits) — so the RM step
+; just shows "unable to close application". Instead we hard-kill the running
+; instance ourselves from [Code] (taskkill /F), before any files are touched.
+CloseApplications=no
 RestartApplications=no
 ; Install per-user by default (no admin prompt); user can pick all-users.
 PrivilegesRequired=lowest
@@ -64,18 +65,28 @@ Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#MyAppName}}
 
 [Code]
 // Magic Downloader keeps running in the system tray when its window is closed
-// (IDM-style), so an upgrade would find MagicDownloader.exe + its _internal
-// files locked by that background process. Inno's graceful "CloseApplications"
-// only sends a window-close request, which the app treats as "hide to tray" —
-// it never actually exits. So force-terminate any running instance here,
-// before files are copied, guaranteeing the new version installs cleanly.
-function PrepareToInstall(var NeedsRestart: Boolean): String;
+// (IDM-style), so an upgrade finds MagicDownloader.exe + its _internal files
+// locked by that background process. A graceful close just hides it to tray,
+// so we FORCE-terminate it (taskkill /F, which bypasses the tray behaviour)
+// as early as possible — before any wizard page and before any file is
+// touched — guaranteeing the new version installs cleanly.
+procedure KillRunningApp;
 var
   ResultCode: Integer;
 begin
-  Result := '';
-  Exec(ExpandConstant('{sys}\taskkill.exe'), '/IM {#MyAppExeName} /F /T',
+  Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /T /IM {#MyAppExeName}',
        '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-  // Give Windows a moment to release the file handles.
-  Sleep(700);
+end;
+
+function InitializeSetup(): Boolean;
+begin
+  KillRunningApp;   // hard-close any running/tray instance up front
+  Result := True;
+end;
+
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+begin
+  KillRunningApp;   // ...and again right before files are written
+  Sleep(600);       // let Windows release the file handles
+  Result := '';
 end;
