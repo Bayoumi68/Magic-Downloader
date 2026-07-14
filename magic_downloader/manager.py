@@ -34,7 +34,9 @@ BUSY_STATUSES = (
 class DownloadManager:
     def __init__(self) -> None:
         self.settings = load_settings()
-        self.jobs: list[DownloadJob] = load_jobs()
+        # Collapse any historical duplicates that point to the exact same file
+        # (accumulated before Overwrite replaced entries in place).
+        self.jobs: list[DownloadJob] = _dedupe_jobs_by_path(load_jobs())
         self._engines: dict[str, DownloadEngine] = {}
         self._threads: dict[str, threading.Thread] = {}
         self._pause_events: dict[str, threading.Event] = {}
@@ -95,6 +97,19 @@ class DownloadManager:
 
     def add_job(self, job: DownloadJob, start: bool = True) -> DownloadJob:
         with self._lock:
+            # Replace any existing entry that targets the SAME file path — e.g.
+            # the user chose "Overwrite" — so the list never shows two rows for
+            # one file. ("Keep both" uses a different path, so it's preserved.)
+            for d in [j for j in self.jobs if j.save_path == job.save_path and j.id != job.id]:
+                eng = self._engines.pop(d.id, None)
+                if eng:
+                    try:
+                        eng.stop()
+                    except Exception:
+                        pass
+                self._threads.pop(d.id, None)
+                self._pause_events.pop(d.id, None)
+            self.jobs = [j for j in self.jobs if j.save_path != job.save_path or j.id == job.id]
             self.jobs.insert(0, job)
             self._persist(force=True)
         self._notify()
@@ -722,6 +737,26 @@ class DownloadManager:
             for pe in self._pause_events.values():
                 pe.clear()
             self._persist(force=True)
+
+
+def _job_score(j: DownloadJob) -> tuple:
+    """Rank duplicate entries so the 'best' copy is the one kept."""
+    return (1 if j.status == DownloadStatus.COMPLETE else 0,
+            int(getattr(j, "downloaded", 0) or 0),
+            float(getattr(j, "created_at", 0) or 0))
+
+
+def _dedupe_jobs_by_path(jobs: list[DownloadJob]) -> list[DownloadJob]:
+    """Collapse entries that target the exact same file path, keeping the most
+    complete/most-downloaded one and preserving list order. Entries in different
+    folders (different paths) are all kept — that's what the Folder column shows."""
+    best: dict[str, DownloadJob] = {}
+    for j in jobs:
+        prev = best.get(j.save_path)
+        if prev is None or _job_score(j) > _job_score(prev):
+            best[j.save_path] = j
+    keep = {id(v) for v in best.values()}
+    return [j for j in jobs if id(j) in keep]
 
 
 def _dedupe_path(p: Path) -> Path:

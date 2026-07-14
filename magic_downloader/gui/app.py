@@ -33,7 +33,7 @@ from magic_downloader.models import (
     format_speed,
 )
 
-COLUMNS = ("filename", "size", "status", "progress", "speed", "eta", "conn", "category")
+COLUMNS = ("filename", "folder", "size", "status", "progress", "speed", "eta", "conn", "category")
 
 # Sidebar filter keys
 FILTER_ALL = "all"
@@ -302,7 +302,8 @@ class MagicDownloaderApp(tk.Tk):
             selectmode="extended",
         )
         headings = {
-            "filename": ("File name", 260),
+            "filename": ("File name", 240),
+            "folder": ("Folder", 240),
             "size": ("Size", 130),
             "status": ("Status", 120),
             "progress": ("Progress", 90),
@@ -713,7 +714,11 @@ class MagicDownloaderApp(tk.Tk):
             conn = job.media_type.upper()
         else:
             conn = str(job.connections) if job.supports_ranges else "1"
-        return (job.filename, size, status, progress, speed, eta, conn, job.category)
+        try:
+            folder = str(Path(job.save_path).parent)
+        except Exception:
+            folder = ""
+        return (job.filename, folder, size, status, progress, speed, eta, conn, job.category)
 
     def _update_detail(self) -> None:
         ids = self._selected_ids()
