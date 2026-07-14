@@ -3,9 +3,9 @@
 ## The one rule you can't get around
 
 **Regular Firefox (Release/Beta) will not permanently install an unsigned
-add-on, and the "allow unsigned" switch is disabled in those builds.** IDM's
-Firefox add-on isn't magic — it's *signed* and published on
-[addons.mozilla.org](https://addons.mozilla.org/firefox/addon/idm-integration-module/).
+add-on, and the "allow unsigned" switch is disabled in those builds.** A permanently-installable
+Firefox add-on has to be *signed* and published on
+[addons.mozilla.org](https://addons.mozilla.org/).
 
 So you have exactly two ways to keep this extension installed permanently:
 
@@ -57,7 +57,7 @@ permanently with **no signing and no account** — that's the simplest
 ## Option B — Permanent in ANY (regular) Firefox — needs Mozilla to sign it (free)
 
 You upload the zip, Mozilla signs it (unlisted = instant, no review), you get a
-`.xpi` that installs permanently in normal Firefox — just like IDM's.
+`.xpi` that installs permanently in normal Firefox — the proper way.
 
 Only needed if you insist on staying on **regular** Firefox. Mozilla signs it
 free (unlisted = instant, no public review), giving you a `.xpi` that installs

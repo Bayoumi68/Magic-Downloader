@@ -1,10 +1,10 @@
 # Magic Downloader — Browser Extension
 
-Grabs **videos** and downloads from **Chrome**, **Edge**, or **Brave** and sends them to the Magic Downloader desktop app — the same idea as IDM's browser integration, including the **“⬇ Download” button on video players**.
+Grabs **videos** and downloads from **Chrome**, **Edge**, or **Brave** and sends them to the Magic Downloader desktop app — a browser-integrated download button, including the **“⬇ Download” button on video players**.
 
 ## What it does
 
-- **YouTube, Vimeo & ~1800 sites** — when a page is playing a video, the popup offers **“This page's video”** with a quality dropdown listing **every** format (handled by yt-dlp in the app). This is the path that actually works on YouTube.
+- **~1800 sites** — when a page is playing a video, the popup offers **“This page's video”** with a quality dropdown listing **every** format (handled by yt-dlp in the app). This is the path that actually works on most video sites.
 - **Sniffs streaming video** on other sites (HLS `.m3u8`, DASH `.mpd`, progressive `.mp4`/`.webm`/`.mp3` …) from network traffic — even with `blob:` URLs and no visible file.
 - **Overlays a Download button** on `<video>` players and shows a **badge** with the number of videos found.
 - **Ignores junk** (thumbnails, UI sounds, tiny sprites) so you never get a stray 6 KB file.
@@ -35,7 +35,7 @@ Grabs **videos** and downloads from **Chrome**, **Edge**, or **Brave** and sends
 ### Firefox
 
 The extension is cross-browser, but **Firefox requires add-ons to be signed to
-install permanently** (this is why IDM's Firefox add-on is on addons.mozilla.org
+install permanently** (this is why a permanent Firefox add-on must be on addons.mozilla.org
 — it's signed). See **[../FIREFOX_INSTALL.md](../FIREFOX_INSTALL.md)** for the
 full guide. Short version:
 
@@ -57,7 +57,7 @@ desktop app running.
 
 | Action | Result |
 |--------|--------|
-| On **YouTube** etc., click the **toolbar icon** | Popup shows **“This page's video”** → pick a quality → downloaded & merged in the app (via yt-dlp) |
+| On a **supported video**, click the **toolbar icon** | Popup shows **“This page's video”** → pick a quality → downloaded & merged in the app (via yt-dlp) |
 | Press ▶ **Play** a video, then click **⬇ Download** on the player | Detected stream(s)/page video shown; pick one → downloaded in the app |
 | Click the **toolbar icon** (badge shows video count) | Popup lists detected media + quality/format picker |
 | Right-click a **link** → *Download with Magic Downloader* | URL + cookies sent to the app |

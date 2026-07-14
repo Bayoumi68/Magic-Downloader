@@ -10,10 +10,10 @@ the browser extension **signed and recognized** by the major browsers.
 Getting an extension "trusted" means getting it **accepted into a browser's
 official store**, where it is reviewed and signed. But:
 
-- **Chrome Web Store (Google) prohibits extensions that download from YouTube**
+- **Chrome Web Store (Google) prohibits extensions that download from certain video sites**
   and content that violates a site's Terms of Service. Video/stream downloaders
-  are routinely **rejected or removed**. This is *why IDM's own Chrome extension
-  keeps getting pulled.* It is a policy decision, not a technical one — no
+  are routinely **rejected or removed**. This is *why such Chrome extensions
+  keep getting pulled.* It is a policy decision, not a technical one — no
   packaging trick gets around it.
 - **Microsoft Edge Add-ons** has historically been more lenient, but the same
   ToS rules apply and enforcement can change.
@@ -24,11 +24,11 @@ official store**, where it is reviewed and signed. But:
 1. **Firefox first.** It's free, it signs everything, and downloaders are
    tolerated. This is your best shot at "trusted + recognized."
 2. **Edge second.** Free, often accepts what Chrome won't.
-3. **Chrome:** expect friction. Options: don't foreground "YouTube," submit and
+3. **Chrome:** expect friction. Options: don't foreground video-site names, submit and
    see, or distribute **outside** the store (self-hosted / enterprise), which
    means it *won't* be one-click-trusted.
 4. To reduce ToS exposure, market it as a **general download manager** (files,
-   HLS/DASH streams) rather than "YouTube downloader," and keep video features
+   HLS/DASH streams) rather than "video downloader," and keep video features
    generic.
 
 A more store-friendly architecture note is at the end (**Native Messaging**).
@@ -192,7 +192,7 @@ if Chrome/Edge rejects the current localhost approach — ask and I'll implement
 
 ### Draft store description
 
-**Short:** "IDM-style download manager: accelerate downloads with multiple
+**Short:** "Multi-connection download manager: accelerate downloads with multiple
 connections, capture browser downloads, and grab video/audio streams — saved to
 your own PC."
 
@@ -202,5 +202,5 @@ a queue, and file categories. Its browser companion adds a download button to
 web pages, detects video and audio streams (HLS/DASH and progressive files), and
 can capture normal browser downloads — all handled by the desktop app on your
 own computer. No account, no tracking, no data leaves your machine. Not
-affiliated with IDM. Please respect the terms of service of the sites you
+affiliated with any other product. Please respect the terms of service of the sites you
 download from."

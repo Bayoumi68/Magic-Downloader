@@ -42,7 +42,7 @@ STEP 2 (Firefox) — Install the extension permanently
 --------------------------------------------------------
   IMPORTANT: normal Firefox (Release/Beta) REFUSES to keep an
   unsigned add-on installed, and that cannot be turned off.
-  (That is why IDM's Firefox add-on is signed on Mozilla's
+  (That is why a permanent Firefox add-on must be signed on Mozilla's
   store.) To keep it WITHOUT signing in or signing anything,
   use a Firefox build that lets you disable signing:
 
@@ -87,7 +87,7 @@ STEP 3 — What you should see on websites
 --------------------------------------------------------
   After install, open ANY normal website (not chrome:// pages):
 
-  • YOUTUBE (and most video sites): click the extension TOOLBAR
+  • Video sites: click the extension TOOLBAR
     ICON -> the popup shows "This page's video" with a quality
     dropdown (every format) -> pick one -> it downloads here
   • On sites with a plain <video>: press Play, then a blue
