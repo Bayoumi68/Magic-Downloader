@@ -73,13 +73,30 @@ def _run_modal(win, parent, on_close_value, result_holder):
     win.bind("<Escape>", lambda _e: _close())
     _center(win, parent)
     try:
-        win.transient(parent) if parent is not None else None
+        if parent is not None:
+            win.transient(parent)
+    except Exception:
+        pass
+    # Raise + focus so the dialog can NEVER open hidden behind the main window
+    # (native message boxes did this for us; a plain Toplevel does not — a
+    # hidden modal makes the app look frozen and "delete does nothing").
+    try:
+        win.deiconify()
+        win.lift()
+        win.attributes("-topmost", True)
+        win.after(200, lambda: win.winfo_exists() and win.attributes("-topmost", False))
+        win.focus_force()
     except Exception:
         pass
     try:
         win.grab_set()
-    except Exception:
-        pass
+    except tk.TclError:
+        # Not viewable yet — wait until it is, then grab.
+        try:
+            win.wait_visibility()
+            win.grab_set()
+        except Exception:
+            pass
     win.wait_window()
     # Restore the modal grab the parent dialog (if any) held before us, so
     # nested dialogs don't leave the underlying dialog non-modal.

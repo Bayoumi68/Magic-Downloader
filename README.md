@@ -8,7 +8,7 @@ An **Internet Download Manager (IDM)–style** multi-connection download manager
 [![Downloads](https://img.shields.io/github/downloads/Bayoumi68/Magic-Downloader/total)](https://github.com/Bayoumi68/Magic-Downloader/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-## ⬇️ Download — latest version: **v0.5.4**
+## ⬇️ Download — latest version: **v0.5.5**
 
 **[Get the latest release →](https://github.com/Bayoumi68/Magic-Downloader/releases/latest)**
 
