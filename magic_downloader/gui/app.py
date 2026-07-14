@@ -167,14 +167,14 @@ class MagicDownloaderApp(tk.Tk):
         self.config(menu=menubar)
 
     def _build_toolbar(self) -> None:
-        bar = tk.Frame(self, bg=T.BG_TOOLBAR, height=72)
+        bar = tk.Frame(self, bg=T.BG_TOOLBAR, height=84)
         bar.pack(fill=tk.X)
         bar.pack_propagate(False)
 
         # Brand: the app logo (falls back to text if the image can't load).
         brand = tk.Frame(bar, bg=T.BG_TOOLBAR)
         brand.pack(side=tk.LEFT, padx=(12, 10), pady=6)
-        self._brand_logo = self._load_brand_logo(58)
+        self._brand_logo = self._load_brand_logo(74)
         if self._brand_logo is not None:
             tk.Label(brand, image=self._brand_logo, bg=T.BG_TOOLBAR).pack()
         else:
@@ -1389,13 +1389,19 @@ class MagicDownloaderApp(tk.Tk):
             from magic_downloader.paths import RESOURCE_ROOT, extension_dir
 
             for p in (
-                RESOURCE_ROOT / "logo.png",
+                RESOURCE_ROOT / "logo_toolbar.png",   # pre-cropped emblem (best)
                 extension_dir() / "icons" / "icon128.png",
                 RESOURCE_ROOT / "browser_extension" / "icons" / "icon128.png",
+                RESOURCE_ROOT / "logo.png",
             ):
                 try:
                     if p.exists():
                         im = Image.open(p).convert("RGBA")
+                        # Trim transparent margins so the emblem fills the space
+                        # (the full logo.png has lots of padding around it).
+                        box = im.split()[3].point(lambda a: 255 if a > 25 else 0).getbbox()
+                        if box:
+                            im = im.crop(box)
                         w = max(1, round(im.width * height / im.height))
                         im = im.resize((w, height), Image.LANCZOS)
                         return ImageTk.PhotoImage(im)
