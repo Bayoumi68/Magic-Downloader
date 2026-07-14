@@ -18,9 +18,11 @@ AppPublisher={#MyAppPublisher}
 DefaultDirName={autopf}\{#MyAppName}
 DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
-; Always show the "Select Destination Location" page, even when upgrading.
+; Show the "Select Destination Location" page, but default it to the EXISTING
+; install folder so an upgrade overwrites the current copy in place instead of
+; creating a second install in a different folder (UsePreviousAppDir=no did that).
 DisableDirPage=no
-UsePreviousAppDir=no
+UsePreviousAppDir=yes
 UninstallDisplayIcon={app}\{#MyAppExeName}
 UninstallDisplayName={#MyAppName}
 ; DON'T use Inno's Restart Manager: it asks the app to close gracefully, which
