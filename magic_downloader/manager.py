@@ -41,6 +41,7 @@ class DownloadManager:
         self._lock = threading.RLock()
         self._listeners: list[Listener] = []
         self._persist_timer: float = 0.0
+        self._last_progress_notify: float = 0.0
         self._stop_scheduler = False
         self.rate_limiter = RateLimiter(self._speed_cap_bps())
         self._apply_ffmpeg_path()
@@ -509,8 +510,16 @@ class DownloadManager:
         return job.status == DownloadStatus.CANCELLED
 
     def _on_progress(self, job: DownloadJob) -> None:
+        # Called from download worker threads on EVERY chunk (per connection).
+        # Persist is already debounced; throttle the UI notify too, otherwise a
+        # multi-connection download fires thousands of cross-thread GUI refreshes
+        # per second and locks up the whole machine. ~8/sec is plenty smooth
+        # (the GUI also self-refreshes on a 400ms timer).
         self._persist(force=False)
-        self._notify()
+        now = time.monotonic()
+        if now - self._last_progress_notify >= 0.12:
+            self._last_progress_notify = now
+            self._notify()
 
     def pause_job(self, job_id: str) -> None:
         with self._lock:

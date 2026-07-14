@@ -528,10 +528,20 @@ class MagicDownloaderApp(tk.Tk):
     # ── refresh ─────────────────────────────────────────────────────────
 
     def _schedule_refresh(self) -> None:
+        # Coalesce: never queue more than one pending refresh at a time, so a
+        # burst of progress notifications from download threads can't pile up
+        # thousands of after() callbacks and lock the UI.
+        if getattr(self, "_refresh_pending", False):
+            return
+        self._refresh_pending = True
         try:
-            self.after(0, self._refresh_all)
+            self.after(0, self._run_scheduled_refresh)
         except tk.TclError:
-            pass
+            self._refresh_pending = False
+
+    def _run_scheduled_refresh(self) -> None:
+        self._refresh_pending = False
+        self._refresh_all()
 
     def _tick(self) -> None:
         self._refresh_all()
