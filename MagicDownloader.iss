@@ -50,7 +50,10 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 
 [Files]
 ; The entire PyInstaller onedir output (exe + _internal with all dependencies).
-Source: "dist\MagicDownloader\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs ignoreversion
+; restartreplace/uninsrestartdelete: if a file (e.g. a loaded VCRUNTIME140.dll)
+; can't be replaced during an upgrade because it's still in use, queue it for
+; replacement on the next reboot instead of failing with "DeleteFile failed".
+Source: "dist\MagicDownloader\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs ignoreversion restartreplace uninsrestartdelete
 ; Handy references alongside the app.
 Source: "INSTALL_BROWSER.txt"; DestDir: "{app}"; Flags: ignoreversion
 Source: "FIREFOX_INSTALL.md"; DestDir: "{app}"; Flags: ignoreversion isreadme
