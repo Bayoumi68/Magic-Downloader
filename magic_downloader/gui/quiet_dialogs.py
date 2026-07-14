@@ -77,26 +77,33 @@ def _run_modal(win, parent, on_close_value, result_holder):
             win.transient(parent)
     except Exception:
         pass
-    # Raise + focus so the dialog can NEVER open hidden behind the main window
-    # (native message boxes did this for us; a plain Toplevel does not — a
-    # hidden modal makes the app look frozen and "delete does nothing").
-    try:
-        win.deiconify()
-        win.lift()
-        win.attributes("-topmost", True)
-        win.after(200, lambda: win.winfo_exists() and win.attributes("-topmost", False))
-        win.focus_force()
-    except Exception:
-        pass
+    # Make it modal and force it to the FRONT — and keep it there until the user
+    # answers. A plain Toplevel can otherwise open hidden behind its parent / the
+    # browser and never take focus. Stay -topmost for the dialog's whole life
+    # (the flag dies with the window) instead of dropping it after a moment.
     try:
         win.grab_set()
     except tk.TclError:
-        # Not viewable yet — wait until it is, then grab.
         try:
             win.wait_visibility()
             win.grab_set()
         except Exception:
             pass
+    def _raise():
+        if not win.winfo_exists():
+            return
+        try:
+            win.deiconify()
+            win.attributes("-topmost", True)
+            win.lift()
+            win.focus_force()
+            first = win.focus_get()
+            if first is None:
+                win.focus_set()
+        except Exception:
+            pass
+    _raise()
+    win.after(60, _raise)   # re-assert after the window manager settles
     win.wait_window()
     # Restore the modal grab the parent dialog (if any) held before us, so
     # nested dialogs don't leave the underlying dialog non-modal.
