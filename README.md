@@ -15,9 +15,12 @@ An **Internet Download Manager (IDM)–style** multi-connection download manager
 _These links always point to the newest version (the filenames never change):_
 
 - **Installer** (recommended): [`MagicDownloader-Setup.exe`](https://github.com/Bayoumi68/Magic-Downloader/releases/latest/download/MagicDownloader-Setup.exe) — Start-menu shortcut + uninstaller, installs per-user (no admin).
+- **Installer, zipped** (use this if your browser/antivirus blocks or renames the `.exe`): [`MagicDownloader-Setup.zip`](https://github.com/Bayoumi68/Magic-Downloader/releases/latest/download/MagicDownloader-Setup.zip) — unzip, then run the installer inside.
 - **Portable** (no install): [`MagicDownloader-win64.zip`](https://github.com/Bayoumi68/Magic-Downloader/releases/latest/download/MagicDownloader-win64.zip) — unzip and run `MagicDownloader.exe`.
 
-> Windows may show a SmartScreen "unknown publisher" prompt (the app is unsigned) — click **More info → Run anyway**. See [PUBLISHING.md](PUBLISHING.md).
+> **Why the “harmful / unknown publisher” warning?** The app is **not code-signed** (a signing certificate costs money), so Windows SmartScreen and some antivirus flag it as *unrecognized* — not because anything is actually wrong. It's open-source; you can build it yourself. Verify your download against [`SHA256SUMS.txt`](https://github.com/Bayoumi68/Magic-Downloader/releases/latest/download/SHA256SUMS.txt) (`Get-FileHash file -Algorithm SHA256`).
+>
+> To install anyway: on the SmartScreen prompt click **More info → Run anyway**; if your antivirus quarantines it, restore it / add an exclusion. See [PUBLISHING.md](PUBLISHING.md).
 > Browser extension: install from [`browser_extension/`](browser_extension/) (Chrome/Edge) or [FIREFOX_INSTALL.md](FIREFOX_INSTALL.md) (Firefox).
 
 ## Features (IDM-inspired)
