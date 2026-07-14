@@ -208,14 +208,24 @@ class DownloadManager:
         extra_headers: dict | None = None,
         source: str = "browser",
         start: bool = True,
+        overwrite: bool = False,
     ) -> dict:
-        """Create + queue a job from finalized (possibly user-edited) values."""
+        """Create + queue a job from finalized (possibly user-edited) values.
+
+        ``overwrite=True`` uses the given name as-is (replacing any existing
+        file); otherwise a colliding name is auto-versioned with "(1)", "(2)"…
+        """
         folder_p = Path(folder or self.settings.get("default_save_path") or ".")
         folder_p.mkdir(parents=True, exist_ok=True)
         name = filename.strip() or "download"
         for ch in '<>:"/\\|?*':
             name = name.replace(ch, "_")
-        save_path = _dedupe_path(folder_p / name)
+        if overwrite:
+            save_path = folder_p / name
+            # Fresh start: drop any stale partial so it doesn't try to resume.
+            Path(str(save_path) + ".part").unlink(missing_ok=True)
+        else:
+            save_path = _dedupe_path(folder_p / name)
 
         job = DownloadJob(
             url=url,
@@ -322,6 +332,24 @@ class DownloadManager:
                 pass
             self.save_settings()
         return name
+
+    #: Categories that ship with the app and can't be deleted.
+    BUILTIN_CATEGORIES = frozenset({"General", "Compressed", "Documents", "Music", "Video"})
+
+    def remove_category(self, name: str) -> bool:
+        """Delete a user-created category (mapping only — files are untouched).
+        Built-in categories can't be removed. Returns True on success."""
+        name = (name or "").strip()
+        if not name or name in self.BUILTIN_CATEGORIES:
+            return False
+        cats = self.settings.get("category_paths") or {}
+        if name not in cats:
+            return False
+        cats.pop(name, None)
+        (self.settings.get("category_extensions") or {}).pop(name, None)
+        self.save_settings()
+        self._notify()
+        return True
 
     def set_job_quality(self, job_id: str, sel: dict, title: str = "") -> None:
         """Change a job's chosen quality/format and re-download it."""
@@ -551,6 +579,100 @@ class DownloadManager:
                 job.error = ""
                 job.status = DownloadStatus.QUEUED
                 self._persist(force=True)
+        self.start_job(job_id)
+
+    # ── file operations on a job (IDM right-click menu) ──────────────────
+
+    @staticmethod
+    def _sanitize_name(name: str) -> str:
+        name = (name or "").strip()
+        for ch in '<>:"/\\|?*':
+            name = name.replace(ch, "_")
+        return name.strip()
+
+    def rename_job(self, job_id: str, new_name: str) -> tuple[bool, str]:
+        """Rename a job's file on disk (and its ``.part``) and update the job.
+        Returns (ok, error_message)."""
+        new_name = self._sanitize_name(new_name)
+        if not new_name:
+            return False, "Enter a file name."
+        with self._lock:
+            job = self.get_job(job_id)
+            if not job:
+                return False, "Download not found."
+            if job.status in (DownloadStatus.DOWNLOADING, DownloadStatus.CONNECTING,
+                              DownloadStatus.PROCESSING):
+                return False, "Pause the download before renaming."
+            old = Path(job.save_path)
+            new = old.with_name(new_name)
+            if new == old:
+                return True, ""
+            if new.exists() or Path(str(new) + ".part").exists():
+                return False, f"“{new_name}” already exists in this folder."
+            try:
+                if old.exists():
+                    old.rename(new)
+                old_part = Path(str(old) + ".part")
+                if old_part.exists():
+                    old_part.rename(Path(str(new) + ".part"))
+            except OSError as exc:
+                return False, str(exc)
+            job.save_path = str(new)
+            job.filename = new.name
+            self._persist(force=True)
+        self._notify()
+        return True, ""
+
+    def move_job(self, job_id: str, new_folder: str) -> tuple[bool, str]:
+        """Move a job's file (and its ``.part``) to *new_folder*."""
+        with self._lock:
+            job = self.get_job(job_id)
+            if not job:
+                return False, "Download not found."
+            if job.status in (DownloadStatus.DOWNLOADING, DownloadStatus.CONNECTING,
+                              DownloadStatus.PROCESSING):
+                return False, "Pause the download before moving."
+            dest_dir = Path(new_folder)
+            try:
+                dest_dir.mkdir(parents=True, exist_ok=True)
+            except OSError as exc:
+                return False, str(exc)
+            old = Path(job.save_path)
+            new = dest_dir / old.name
+            if new == old:
+                return True, ""
+            if new.exists() or Path(str(new) + ".part").exists():
+                return False, f"A file named “{old.name}” already exists there."
+            try:
+                if old.exists():
+                    old.replace(new)
+                old_part = Path(str(old) + ".part")
+                if old_part.exists():
+                    old_part.replace(Path(str(new) + ".part"))
+            except OSError as exc:
+                return False, str(exc)
+            job.save_path = str(new)
+            self._persist(force=True)
+        self._notify()
+        return True, ""
+
+    def redownload_job(self, job_id: str) -> None:
+        """Discard progress and download the job again from scratch."""
+        self.cancel_job(job_id)  # stop any running engine first
+        with self._lock:
+            job = self.get_job(job_id)
+            if not job:
+                return
+            Path(str(job.save_path) + ".part").unlink(missing_ok=True)
+            job.downloaded = 0
+            job.total_size = 0
+            job.segments = []
+            job.speed_bps = 0.0
+            job.error = ""
+            if isinstance(job.media_meta, dict):
+                job.media_meta.pop("seg_done", None)
+            job.status = DownloadStatus.QUEUED
+            self._persist(force=True)
         self.start_job(job_id)
 
     def _kick_queue(self) -> None:

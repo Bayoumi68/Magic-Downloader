@@ -4,7 +4,7 @@
 ; Output:  installer\MagicDownloader-Setup-<version>.exe
 
 #define MyAppName "Magic Downloader"
-#define MyAppVersion "0.5.3"
+#define MyAppVersion "0.5.4"
 #define MyAppPublisher "Magic Downloader"
 #define MyAppExeName "MagicDownloader.exe"
 
@@ -61,3 +61,21 @@ Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: de
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#MyAppName}}"; Flags: nowait postinstall skipifsilent
+
+[Code]
+// Magic Downloader keeps running in the system tray when its window is closed
+// (IDM-style), so an upgrade would find MagicDownloader.exe + its _internal
+// files locked by that background process. Inno's graceful "CloseApplications"
+// only sends a window-close request, which the app treats as "hide to tray" —
+// it never actually exits. So force-terminate any running instance here,
+// before files are copied, guaranteeing the new version installs cleanly.
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+var
+  ResultCode: Integer;
+begin
+  Result := '';
+  Exec(ExpandConstant('{sys}\taskkill.exe'), '/IM {#MyAppExeName} /F /T',
+       '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  // Give Windows a moment to release the file handles.
+  Sleep(700);
+end;

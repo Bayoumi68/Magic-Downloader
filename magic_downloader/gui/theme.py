@@ -11,6 +11,7 @@ BG_STATUS = "#dce6f0"
 FG = "#1a1a1a"
 FG_MUTED = "#5a6a7a"
 FG_ON_DARK = "#ffffff"
+FG_ON_DARK_DISABLED = "#6a83ab"  # dimmed toolbar text for inactive buttons
 ACCENT = "#2b579a"
 ACCENT_HOVER = "#1e3f73"
 GREEN = "#2e9b3a"

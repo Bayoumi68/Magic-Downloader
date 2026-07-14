@@ -129,6 +129,7 @@ class ToolbarButton(tk.Frame):
         self._command = command
         self._bg = bg
         self._hover = T.ACCENT_HOVER
+        self._enabled = True
 
         self.icon_lbl = tk.Label(
             self, text=icon, font=("Segoe UI Emoji", 16), bg=bg, fg=T.FG_ON_DARK, cursor="hand2"
@@ -144,11 +145,28 @@ class ToolbarButton(tk.Frame):
             w.bind("<Enter>", self._enter)
             w.bind("<Leave>", self._leave)
 
+    def set_enabled(self, enabled: bool) -> None:
+        """Dim/undim the button. A disabled button ignores clicks and hover so
+        it never looks active when its action doesn't apply."""
+        enabled = bool(enabled)
+        if enabled == self._enabled:
+            return
+        self._enabled = enabled
+        fg = T.FG_ON_DARK if enabled else T.FG_ON_DARK_DISABLED
+        cursor = "hand2" if enabled else "arrow"
+        for w in (self.icon_lbl, self.text_lbl):
+            w.configure(fg=fg, cursor=cursor)
+        # Reset background in case the pointer was hovering when it disabled.
+        for w in (self, self.icon_lbl, self.text_lbl):
+            w.configure(bg=self._bg)
+
     def _click(self, _event=None) -> None:
-        if self._command:
+        if self._enabled and self._command:
             self._command()
 
     def _enter(self, _event=None) -> None:
+        if not self._enabled:
+            return
         for w in (self, self.icon_lbl, self.text_lbl):
             w.configure(bg=self._hover)
 

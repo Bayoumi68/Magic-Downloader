@@ -599,6 +599,7 @@ function notify(title, message) {
       iconUrl: "icons/icon128.png",
       title,
       message,
+      silent: true, // no notification sound/beep
     });
   } catch (_) {
     /* notifications may be blocked */

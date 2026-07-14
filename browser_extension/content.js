@@ -262,52 +262,71 @@
     }
   }
 
-  function makeDraggable(el) {
+  // Pointer-event drag: setPointerCapture routes every pointermove/up to the
+  // element itself — even when the pointer travels over a <video>, canvas or
+  // cross-origin content that would otherwise swallow document mouse events.
+  // `onStart(rect)` primes positioning; `onMove(dx,dy)` moves; `onEnd(moved)`
+  // finalises. Returns nothing.
+  function attachDrag(el, { onStart, onMove, onEnd }) {
     let dragging = false;
     let moved = false;
     let startX = 0;
     let startY = 0;
-    let origLeft = 0;
-    let origTop = 0;
+    let pid = null;
 
-    const point = (e) => (e.touches && e.touches[0]) || e;
-
-    function onDown(e) {
-      if (e.button != null && e.button !== 0) return;
-      const p = point(e);
-      const rect = el.getBoundingClientRect();
+    el.addEventListener("pointerdown", (e) => {
+      if (e.button != null && e.button !== 0) return; // left button / touch / pen only
       dragging = true;
       moved = false;
-      startX = p.clientX;
-      startY = p.clientY;
-      origLeft = rect.left;
-      origTop = rect.top;
-      setFabPos(rect.left, rect.top); // switch from right/bottom to left/top
-      document.addEventListener("mousemove", onMove, true);
-      document.addEventListener("mouseup", onUp, true);
-      document.addEventListener("touchmove", onMove, { capture: true, passive: false });
-      document.addEventListener("touchend", onUp, true);
+      startX = e.clientX;
+      startY = e.clientY;
+      pid = e.pointerId;
+      try {
+        el.setPointerCapture(pid);
+      } catch (_) {
+        /* capture unsupported → falls back to normal bubbling */
+      }
+      onStart(el.getBoundingClientRect());
       e.preventDefault();
-    }
+      e.stopPropagation();
+    });
 
-    function onMove(e) {
+    el.addEventListener("pointermove", (e) => {
       if (!dragging) return;
-      const p = point(e);
-      const dx = p.clientX - startX;
-      const dy = p.clientY - startY;
-      if (Math.abs(dx) > 4 || Math.abs(dy) > 4) moved = true;
-      setFabPos(origLeft + dx, origTop + dy);
-      if (e.cancelable) e.preventDefault();
-    }
+      const dx = e.clientX - startX;
+      const dy = e.clientY - startY;
+      if (Math.abs(dx) > 3 || Math.abs(dy) > 3) moved = true;
+      onMove(dx, dy);
+      e.preventDefault();
+    });
 
-    function onUp() {
+    function finish(e) {
       if (!dragging) return;
       dragging = false;
-      document.removeEventListener("mousemove", onMove, true);
-      document.removeEventListener("mouseup", onUp, true);
-      document.removeEventListener("touchmove", onMove, true);
-      document.removeEventListener("touchend", onUp, true);
-      if (moved) {
+      try {
+        if (pid != null) el.releasePointerCapture(pid);
+      } catch (_) {
+        /* ignore */
+      }
+      pid = null;
+      onEnd(moved);
+    }
+    el.addEventListener("pointerup", finish);
+    el.addEventListener("pointercancel", finish);
+  }
+
+  function makeDraggable(el) {
+    let origLeft = 0;
+    let origTop = 0;
+    attachDrag(el, {
+      onStart: (rect) => {
+        origLeft = rect.left;
+        origTop = rect.top;
+        setFabPos(rect.left, rect.top); // switch from right/bottom to left/top
+      },
+      onMove: (dx, dy) => setFabPos(origLeft + dx, origTop + dy),
+      onEnd: (moved) => {
+        if (!moved) return;
         suppressNextClick = true;
         const rect = el.getBoundingClientRect();
         try {
@@ -316,11 +335,8 @@
           /* ignore */
         }
         if (panel && panel.classList.contains("md-open")) positionPanel();
-      }
-    }
-
-    el.addEventListener("mousedown", onDown, true);
-    el.addEventListener("touchstart", onDown, { capture: true, passive: false });
+      },
+    });
   }
 
   function positionPanel() {
@@ -428,84 +444,48 @@
     const h = btn.offsetHeight || 30;
     const left = Math.max(2, Math.min(window.innerWidth - w - 2, a.left));
     const top = Math.max(2, Math.min(window.innerHeight - h - 2, a.top));
-    btn.style.top = `${top}px`;
-    btn.style.left = `${left}px`;
+    btn.style.setProperty("top", `${top}px`, "important");
+    btn.style.setProperty("left", `${left}px`, "important");
   }
 
   function makeVideoBtnDraggable(el) {
-    let dragging = false;
-    let moved = false;
-    let startX = 0;
-    let startY = 0;
     let origLeft = 0;
     let origTop = 0;
-    const point = (e) => (e.touches && e.touches[0]) || e;
-
-    function onDown(e) {
-      if (e.button != null && e.button !== 0) return;
-      const p = point(e);
-      const rect = el.getBoundingClientRect();
-      dragging = true;
-      moved = false;
-      overlayDragging = true;
-      startX = p.clientX;
-      startY = p.clientY;
-      origLeft = rect.left;
-      origTop = rect.top;
-      document.addEventListener("mousemove", onMove, true);
-      document.addEventListener("mouseup", onUp, true);
-      document.addEventListener("touchmove", onMove, { capture: true, passive: false });
-      document.addEventListener("touchend", onUp, true);
-      e.preventDefault();
-      e.stopPropagation();
-    }
-
-    function onMove(e) {
-      if (!dragging) return;
-      const p = point(e);
-      const dx = p.clientX - startX;
-      const dy = p.clientY - startY;
-      if (Math.abs(dx) > 4 || Math.abs(dy) > 4) moved = true;
-      const w = el.offsetWidth || 120;
-      const h = el.offsetHeight || 30;
-      const nl = Math.max(2, Math.min(window.innerWidth - w - 2, origLeft + dx));
-      const nt = Math.max(2, Math.min(window.innerHeight - h - 2, origTop + dy));
-      el.style.left = nl + "px";
-      el.style.top = nt + "px";
-      if (e.cancelable) e.preventDefault();
-    }
-
-    function onUp() {
-      if (!dragging) return;
-      dragging = false;
-      overlayDragging = false;
-      document.removeEventListener("mousemove", onMove, true);
-      document.removeEventListener("mouseup", onUp, true);
-      document.removeEventListener("touchmove", onMove, true);
-      document.removeEventListener("touchend", onUp, true);
-      if (moved) {
+    attachDrag(el, {
+      onStart: (rect) => {
+        overlayDragging = true; // freeze positionOverlay() while we drag
+        origLeft = rect.left;
+        origTop = rect.top;
+      },
+      onMove: (dx, dy) => {
+        const w = el.offsetWidth || 120;
+        const h = el.offsetHeight || 30;
+        const nl = Math.max(2, Math.min(window.innerWidth - w - 2, origLeft + dx));
+        const nt = Math.max(2, Math.min(window.innerHeight - h - 2, origTop + dy));
+        el.style.setProperty("left", nl + "px", "important");
+        el.style.setProperty("top", nt + "px", "important");
+      },
+      onEnd: (moved) => {
+        overlayDragging = false;
+        if (!moved) return;
         overlaySuppressClick = true;
-        // Save the offset relative to this video's default anchor so all
-        // video buttons move consistently.
+        // Save the offset relative to this video's default anchor so every
+        // video button moves consistently and survives repositioning ticks.
         const video = el._mdVideo;
-        if (video) {
-          const vr = video.getBoundingClientRect();
-          const baseLeft = Math.max(6, Math.min(window.innerWidth - 130, vr.right - 128));
-          const baseTop = Math.max(6, vr.top + 8);
-          const br = el.getBoundingClientRect();
-          videoBtnOffset = { dx: Math.round(br.left - baseLeft), dy: Math.round(br.top - baseTop) };
-          try {
-            B.storage.local.set({ [VIDEO_BTN_OFFSET_KEY]: videoBtnOffset });
-          } catch (_) {
-            /* ignore */
-          }
-          repositionAll();
+        if (!video) return;
+        const vr = video.getBoundingClientRect();
+        const baseLeft = Math.max(6, Math.min(window.innerWidth - 130, vr.right - 128));
+        const baseTop = Math.max(6, vr.top + 8);
+        const br = el.getBoundingClientRect();
+        videoBtnOffset = { dx: Math.round(br.left - baseLeft), dy: Math.round(br.top - baseTop) };
+        try {
+          B.storage.local.set({ [VIDEO_BTN_OFFSET_KEY]: videoBtnOffset });
+        } catch (_) {
+          /* ignore */
         }
-      }
-    }
-
-    el.addEventListener("mousedown", onDown, true);
-    el.addEventListener("touchstart", onDown, { capture: true, passive: false });
+        repositionAll();
+      },
+    });
   }
 
   async function refreshOverlays() {

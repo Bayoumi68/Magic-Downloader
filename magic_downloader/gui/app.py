@@ -8,7 +8,9 @@ import sys
 import threading
 import tkinter as tk
 from pathlib import Path
-from tkinter import messagebox, ttk
+from tkinter import filedialog, ttk
+
+from magic_downloader.gui import quiet_dialogs as messagebox
 from urllib.parse import urlparse
 
 from magic_downloader.browser_server import BrowserAPIServer
@@ -46,6 +48,13 @@ FILTER_CAT_PREFIX = "cat:"
 class MagicDownloaderApp(tk.Tk):
     def __init__(self) -> None:
         super().__init__()
+        # Silence Tk's bell so no widget ever beeps (backspace in an empty
+        # field, a Spinbox hitting its limit, etc.). Replace the built-in
+        # `bell` command with a no-op — purely removes the sound.
+        try:
+            self.tk.eval("catch {rename bell {}}; proc bell args {}")
+        except tk.TclError:
+            pass
         self.title("Magic Downloader — Multi-connection Download Manager")
         self.geometry("1200x700")
         self.minsize(960, 560)
@@ -175,19 +184,22 @@ class MagicDownloaderApp(tk.Tk):
         sep.pack(side=tk.LEFT, fill=tk.Y, pady=10, padx=4)
 
         actions = [
-            ("➕", "Add URL", self._add_url),
-            ("🎬", "Video", self._add_video),
-            ("▶", "Resume", self._resume_selected),
-            ("⏸", "Pause", self._pause_selected),
-            ("⏹", "Stop", self._cancel_selected),
-            ("🗑", "Delete", self._delete_selected),
-            ("📂", "Folder", self._open_folder),
-            ("📄", "Open", self._open_file),
-            ("🌐", "Browser", self._open_extension_help),
-            ("⚙", "Options", self._open_settings),
+            ("add", "➕", "Add URL", self._add_url),
+            ("video", "🎬", "Video", self._add_video),
+            ("resume", "▶", "Resume", self._resume_selected),
+            ("pause", "⏸", "Pause", self._pause_selected),
+            ("stop", "⏹", "Stop", self._cancel_selected),
+            ("delete", "🗑", "Delete", self._delete_selected),
+            ("folder", "📂", "Folder", self._open_folder),
+            ("open", "📄", "Open", self._open_file),
+            ("browser", "🌐", "Browser", self._open_extension_help),
+            ("options", "⚙", "Options", self._open_settings),
         ]
-        for icon, text, cmd in actions:
-            ToolbarButton(bar, icon, text, cmd).pack(side=tk.LEFT, padx=1, pady=4)
+        self._buttons: dict[str, ToolbarButton] = {}
+        for key, icon, text, cmd in actions:
+            btn = ToolbarButton(bar, icon, text, cmd)
+            btn.pack(side=tk.LEFT, padx=1, pady=4)
+            self._buttons[key] = btn
 
         # Live speed badge on the right
         right = tk.Frame(bar, bg=T.BG_TOOLBAR)
@@ -244,6 +256,7 @@ class MagicDownloaderApp(tk.Tk):
         )
         self.cat_list.pack(fill=tk.BOTH, expand=True, padx=0, pady=0)
         self.cat_list.bind("<<ListboxSelect>>", self._on_category_select)
+        self.cat_list.bind("<Button-3>", self._sidebar_context)
 
         # Sidebar items are built dynamically from the current categories.
         self._sidebar_items: list[tuple[str, str]] = []
@@ -315,7 +328,7 @@ class MagicDownloaderApp(tk.Tk):
         self.tree.tag_configure("Cancelled", foreground=T.GRAY)
         self.tree.tag_configure("Queued", foreground=T.GRAY)
 
-        self.tree.bind("<<TreeviewSelect>>", lambda e: self._update_detail())
+        self.tree.bind("<<TreeviewSelect>>", lambda e: self._on_selection_change())
         self.tree.bind("<Double-1>", lambda e: self._on_double_click())
         self.tree.bind("<Button-3>", self._context_menu)
 
@@ -323,9 +336,12 @@ class MagicDownloaderApp(tk.Tk):
         self._ctx.add_command(label="▶  Resume / Start", command=self._resume_selected)
         self._ctx.add_command(label="⏸  Pause", command=self._pause_selected)
         self._ctx.add_command(label="⏹  Stop", command=self._cancel_selected)
+        self._ctx.add_command(label="🔁  Re-download", command=self._redownload_selected)
         self._ctx.add_command(label="🎬  Choose quality…", command=self._choose_quality)
         self._ctx.add_command(label="📊  Show progress window", command=self._show_progress_selected)
         self._ctx.add_separator()
+        self._ctx.add_command(label="✏  Rename…", command=self._rename_selected)
+        self._ctx.add_command(label="📁  Move to…", command=self._move_selected)
         self._ctx.add_command(label="📄  Open file", command=self._open_file)
         self._ctx.add_command(label="📂  Open folder", command=self._open_folder)
         self._ctx.add_separator()
@@ -523,7 +539,30 @@ class MagicDownloaderApp(tk.Tk):
         self._refresh_tree()
         self._update_detail()
         self._update_status()
+        self._update_toolbar_state()
         self._update_progress_dialogs()
+
+    def _on_selection_change(self) -> None:
+        self._update_detail()
+        self._update_toolbar_state()
+
+    def _update_toolbar_state(self) -> None:
+        """Dim toolbar buttons whose action doesn't apply to the current
+        selection, so a coloured button never looks active while it's inert."""
+        if not getattr(self, "_buttons", None):
+            return
+        sel = [j for j in (self.manager.get_job(i) for i in self._selected_ids()) if j]
+        S = DownloadStatus
+
+        def any_in(*statuses) -> bool:
+            return any(j.status in statuses for j in sel)
+
+        self._buttons["resume"].set_enabled(any_in(S.PAUSED, S.FAILED, S.CANCELLED, S.QUEUED))
+        self._buttons["pause"].set_enabled(any_in(S.DOWNLOADING, S.CONNECTING, S.QUEUED))
+        self._buttons["stop"].set_enabled(any(j.status not in (S.COMPLETE, S.CANCELLED) for j in sel))
+        self._buttons["delete"].set_enabled(bool(sel))
+        self._buttons["open"].set_enabled(any_in(S.COMPLETE))
+        # add / video / folder / browser / options are always applicable.
 
     def _show_progress_selected(self) -> None:
         for jid in self._selected_ids():
@@ -780,6 +819,135 @@ class MagicDownloaderApp(tk.Tk):
                 self.tree.selection_set(row)
             self._ctx.tk_popup(event.x_root, event.y_root)
 
+    # ── sidebar (category folders) right-click ───────────────────────────
+
+    def _sidebar_context(self, event: tk.Event) -> None:
+        idx = self.cat_list.nearest(event.y)
+        if idx < 0 or idx >= len(self._sidebar_items):
+            return
+        label, key = self._sidebar_items[idx]
+        menu = tk.Menu(self, tearoff=0)
+        is_cat = bool(key) and key.startswith(FILTER_CAT_PREFIX)
+        cat = key[len(FILTER_CAT_PREFIX):] if is_cat else ""
+        if is_cat:
+            # Select + switch to the category so the menu targets what's shown.
+            self.cat_list.selection_clear(0, tk.END)
+            self.cat_list.selection_set(idx)
+            self._on_category_select()
+            menu.add_command(label="📂  Browse folder", command=lambda c=cat: self._sidebar_browse(c))
+            menu.add_separator()
+        menu.add_command(label="➕  Add category…", command=self._sidebar_add_category)
+        if is_cat:
+            builtin = cat in self.manager.BUILTIN_CATEGORIES
+            menu.add_command(
+                label="🗑  Delete category",
+                state="disabled" if builtin else "normal",
+                command=lambda c=cat: self._sidebar_delete_category(c),
+            )
+        menu.tk_popup(event.x_root, event.y_root)
+
+    def _sidebar_browse(self, cat: str) -> None:
+        folder = (self.manager.settings.get("category_paths") or {}).get(cat)
+        if not folder:
+            folder = self.manager.settings.get("default_save_path") or str(Path.home() / "Downloads")
+        p = Path(folder)
+        try:
+            p.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            pass
+        self._open_path(p)
+
+    def _sidebar_add_category(self) -> None:
+        name = messagebox.askstring("Add category", "Category name:", parent=self)
+        if not name or not name.strip():
+            return
+        name = name.strip()
+        folder = filedialog.askdirectory(
+            title=f"Folder for “{name}” (Cancel = use a default folder)",
+            initialdir=self.manager.settings.get("default_save_path") or None,
+            parent=self,
+            mustexist=False,
+        ) or None
+        created = self.manager.add_category(name, folder)
+        if created:
+            self._rebuild_sidebar()
+
+    def _sidebar_delete_category(self, cat: str) -> None:
+        if not messagebox.askyesno(
+            "Delete category",
+            f"Remove the “{cat}” category from the sidebar?\n\n"
+            "Your downloaded files are NOT deleted — only the category entry.",
+            parent=self,
+        ):
+            return
+        if self.manager.remove_category(cat):
+            if self._filter == FILTER_CAT_PREFIX + cat:
+                self._filter = FILTER_ALL
+            self._rebuild_sidebar()
+            self._refresh_tree()
+        else:
+            messagebox.showinfo(
+                "Delete category", "Built-in categories can't be removed.", parent=self
+            )
+
+    # ── file-table right-click file operations ───────────────────────────
+
+    def _rename_selected(self) -> None:
+        ids = self._selected_ids()
+        if not ids:
+            return
+        job = self.manager.get_job(ids[0])
+        if not job:
+            return
+        new = messagebox.askstring(
+            "Rename", "New file name:", parent=self, initialvalue=job.filename
+        )
+        if not new or new.strip() == job.filename:
+            return
+        ok, err = self.manager.rename_job(job.id, new)
+        if not ok:
+            messagebox.showerror("Rename", err, parent=self)
+        self._refresh_all()
+
+    def _move_selected(self) -> None:
+        ids = self._selected_ids()
+        if not ids:
+            return
+        job = self.manager.get_job(ids[0])
+        if not job:
+            return
+        dest = filedialog.askdirectory(
+            title="Move to folder",
+            initialdir=str(Path(job.save_path).parent),
+            parent=self,
+            mustexist=False,
+        )
+        if not dest:
+            return
+        ok, err = self.manager.move_job(job.id, dest)
+        if not ok:
+            messagebox.showerror("Move", err, parent=self)
+        self._refresh_all()
+
+    def _redownload_selected(self) -> None:
+        ids = self._selected_ids()
+        if not ids:
+            return
+        names = [j.filename for j in (self.manager.get_job(i) for i in ids) if j]
+        if not names:
+            return
+        preview = ", ".join(names[:5]) + (" …" if len(names) > 5 else "")
+        if not messagebox.askyesno(
+            "Re-download",
+            f"Download again from the start (discarding current progress)?\n\n{preview}",
+            parent=self,
+        ):
+            return
+        for jid in ids:
+            self.manager.redownload_job(jid)
+            self._open_progress(jid)
+        self._refresh_all()
+
     # ── actions ─────────────────────────────────────────────────────────
 
     def _add_url(self, initial: str = "") -> None:
@@ -860,6 +1028,7 @@ class MagicDownloaderApp(tk.Tk):
                 media_type=final["media_type"], media_meta=final["media_meta"],
                 cookie=final["cookie"], referrer=final["referrer"],
                 extra_headers=final["extra_headers"], start=start, source="browser",
+                overwrite=bool(final.get("overwrite")),
             )
             if start and res.get("id"):
                 self._open_progress(res["id"])
@@ -1276,17 +1445,8 @@ class MagicDownloaderApp(tk.Tk):
             self.withdraw()
         except tk.TclError:
             pass
-        # First time only: let the user know it's still alive.
-        if not getattr(self, "_tray_notified", False):
-            self._tray_notified = True
-            try:
-                self._tray.notify(
-                    "Magic Downloader is still running. Right-click the tray icon "
-                    "to show it or exit.",
-                    "Minimized to tray",
-                )
-            except Exception:
-                pass
+        # (No tray balloon: it plays a Windows notification sound and pystray
+        # has no silent option. The tray icon itself signals the app is alive.)
 
     def _on_minimize(self, event: tk.Event) -> None:
         # Hide to tray on the minimize button too, if the user opted in.

@@ -5,7 +5,10 @@ from __future__ import annotations
 import threading
 import tkinter as tk
 from pathlib import Path
-from tkinter import filedialog, messagebox, simpledialog, ttk
+from tkinter import filedialog, ttk
+
+from magic_downloader.gui import quiet_dialogs as messagebox
+from magic_downloader.gui import quiet_dialogs as simpledialog
 from typing import Callable
 from urllib.parse import urlparse
 
@@ -29,6 +32,50 @@ def _center(win: tk.Toplevel) -> None:
     w, h = win.winfo_width(), win.winfo_height()
     sw, sh = win.winfo_screenwidth(), win.winfo_screenheight()
     win.geometry(f"+{(sw - w) // 2}+{(sh - h) // 2}")
+
+
+def _dedupe_name(folder: Path, name: str) -> str:
+    """Return a non-colliding file name in *folder* by appending (1), (2), …"""
+    p = folder / name
+    if not p.exists() and not Path(str(p) + ".part").exists():
+        return name
+    stem, suf = Path(name).stem, Path(name).suffix
+    i = 1
+    while True:
+        cand = f"{stem} ({i}){suf}"
+        cp = folder / cand
+        if not cp.exists() and not Path(str(cp) + ".part").exists():
+            return cand
+        i += 1
+
+
+def resolve_name_conflict(parent: tk.Misc, folder: Path, name: str) -> tuple[str, str]:
+    """IDM-style filename collision. If *name* already exists in *folder*, ask
+    the user what to do instead of silently versioning.
+
+    Returns ``(action, final_name)`` where action is one of:
+      • ``"ok"``        — no collision, use *name* as-is
+      • ``"overwrite"`` — replace the existing file (name unchanged)
+      • ``"rename"``    — keep both; *final_name* is a versioned name
+      • ``"cancel"``    — user backed out; caller should abort
+    """
+    p = folder / name
+    if not p.exists() and not Path(str(p) + ".part").exists():
+        return ("ok", name)
+    choice = messagebox.ask(
+        "File already exists",
+        f"A file named:\n\n    {name}\n\n"
+        f"already exists in:\n{folder}\n\n"
+        "•  Add version — keep both (saves as “name (1).ext”)\n"
+        "•  Overwrite — replace the existing file\n",
+        [("Add version", "rename"), ("Overwrite", "overwrite"), ("Cancel", "cancel")],
+        parent=parent,
+    )
+    if choice == "overwrite":
+        return ("overwrite", name)
+    if choice == "rename":
+        return ("rename", _dedupe_name(folder, name))
+    return ("cancel", name)
 
 
 def _confirm_create_folder(parent: tk.Misc, folder: str) -> bool:
@@ -194,18 +241,16 @@ class AddDownloadDialog(tk.Toplevel):
             self.path_var.get().strip() or str(resolve_save_path(self.settings, name).parent)
         )
         folder.mkdir(parents=True, exist_ok=True)
+        # IDM-style: if the name already exists, ask (overwrite / add version)
+        # instead of silently appending "(1)".
+        action, name = resolve_name_conflict(self, folder, name)
+        if action == "cancel":
+            return  # keep the dialog open so the user can change the name
         save_path = str(folder / name)
-        p = Path(save_path)
-        if p.exists() or Path(str(p) + ".part").exists():
-            stem, suf = p.stem, p.suffix
-            i = 1
-            while True:
-                candidate = p.with_name(f"{stem} ({i}){suf}")
-                if not candidate.exists() and not Path(str(candidate) + ".part").exists():
-                    save_path = str(candidate)
-                    name = candidate.name
-                    break
-                i += 1
+        if action == "overwrite":
+            # Drop any stale partial so the download starts fresh; the finished
+            # file replaces the existing one when it completes.
+            Path(save_path + ".part").unlink(missing_ok=True)
 
         job = DownloadJob(
             url=url,
@@ -601,6 +646,14 @@ class CaptureDialog(tk.Toplevel):
         result = self._final()
         if not _confirm_create_folder(self, result["folder"]):
             return
+        # IDM-style filename collision prompt (overwrite / add version / cancel).
+        action, newname = resolve_name_conflict(
+            self, Path(result["folder"]), result["filename"]
+        )
+        if action == "cancel":
+            return  # keep the dialog open
+        result["filename"] = newname
+        result["overwrite"] = action == "overwrite"
         self._done = True
         always = bool(self.always_var.get())
         self.destroy()
