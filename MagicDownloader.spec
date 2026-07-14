@@ -12,6 +12,7 @@ from PyInstaller.utils.hooks import collect_all, collect_submodules
 datas = [
     ("browser_extension", "browser_extension"),
     ("INSTALL_BROWSER.txt", "."),
+    ("logo.png", "."),  # shown as the toolbar brand
 ]
 binaries = []
 hiddenimports = []

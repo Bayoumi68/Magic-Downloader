@@ -171,17 +171,21 @@ class MagicDownloaderApp(tk.Tk):
         bar.pack(fill=tk.X)
         bar.pack_propagate(False)
 
-        # Brand
+        # Brand: the app logo (falls back to text if the image can't load).
         brand = tk.Frame(bar, bg=T.BG_TOOLBAR)
-        brand.pack(side=tk.LEFT, padx=(12, 8), pady=8)
-        tk.Label(
-            brand,
-            text="Magic\nDownloader",
-            bg=T.BG_TOOLBAR,
-            fg=T.FG_ON_DARK,
-            font=("Segoe UI", 10, "bold"),
-            justify=tk.LEFT,
-        ).pack()
+        brand.pack(side=tk.LEFT, padx=(12, 10), pady=6)
+        self._brand_logo = self._load_brand_logo(58)
+        if self._brand_logo is not None:
+            tk.Label(brand, image=self._brand_logo, bg=T.BG_TOOLBAR).pack()
+        else:
+            tk.Label(
+                brand,
+                text="Magic\nDownloader",
+                bg=T.BG_TOOLBAR,
+                fg=T.FG_ON_DARK,
+                font=("Segoe UI", 10, "bold"),
+                justify=tk.LEFT,
+            ).pack()
 
         sep = tk.Frame(bar, bg="#1e3f73", width=1)
         sep.pack(side=tk.LEFT, fill=tk.Y, pady=10, padx=4)
@@ -1375,6 +1379,31 @@ class MagicDownloaderApp(tk.Tk):
         )
 
     # ── system tray (IDM-style: close hides, only Exit quits) ────────────
+
+    def _load_brand_logo(self, height: int):
+        """Load + scale the app logo (logo.png, else the app icon) for the
+        toolbar brand. Returns a PhotoImage, or None if it can't be loaded."""
+        try:
+            from PIL import Image, ImageTk
+
+            from magic_downloader.paths import RESOURCE_ROOT, extension_dir
+
+            for p in (
+                RESOURCE_ROOT / "logo.png",
+                extension_dir() / "icons" / "icon128.png",
+                RESOURCE_ROOT / "browser_extension" / "icons" / "icon128.png",
+            ):
+                try:
+                    if p.exists():
+                        im = Image.open(p).convert("RGBA")
+                        w = max(1, round(im.width * height / im.height))
+                        im = im.resize((w, height), Image.LANCZOS)
+                        return ImageTk.PhotoImage(im)
+                except Exception:  # noqa: BLE001 — try the next candidate
+                    continue
+        except Exception:  # noqa: BLE001 — PIL missing etc. → text fallback
+            return None
+        return None
 
     def _set_window_icon(self) -> None:
         """Set the title-bar / taskbar icon (and for child dialogs)."""
