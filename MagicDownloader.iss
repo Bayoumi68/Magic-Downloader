@@ -74,7 +74,12 @@ procedure KillRunningApp;
 var
   ResultCode: Integer;
 begin
-  Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /T /IM {#MyAppExeName}',
+  // NOTE: no /T. The user often launches this installer FROM the app (opened
+  // from the download list), making Setup a CHILD of MagicDownloader.exe — and
+  // /T would kill the whole tree, taking the installer down with it. Killing
+  // just the app by image name unlocks its files; the installer (a differently
+  // named child) keeps running.
+  Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM {#MyAppExeName}',
        '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
 end;
 
