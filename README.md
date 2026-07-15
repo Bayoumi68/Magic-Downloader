@@ -8,7 +8,7 @@ A **fast, multi-connection** download manager for Windows, with a **real browser
 [![Downloads](https://img.shields.io/github/downloads/Bayoumi68/Magic-Downloader/total)](https://github.com/Bayoumi68/Magic-Downloader/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-## ⬇️ Download — latest version: **v0.5.17**
+## ⬇️ Download — latest version: **v0.5.18**
 
 **[Get the latest release →](https://github.com/Bayoumi68/Magic-Downloader/releases/latest)**
 
@@ -41,7 +41,7 @@ _These links always point to the newest version (the filenames never change):_
 | **Browser integration** | Chrome/Edge/Brave extension: network media sniffing, right-click links, capture browser downloads |
 | **History** | Completed downloads listed; open file / folder |
 | **Settings** | Connections per download, max simultaneous downloads, default save path |
-| **In-app updates** | **Help → About** (or **Check for updates**) shows your version, checks for a newer release, and installs it for you — the download is verified against its published SHA-256 first. **Options → General:** check for updates at startup + every 60 min, and optionally **install them automatically** (it waits until no download is running, so it never interrupts a transfer) |
+| **In-app updates** | **Help → About** shows your version, checks for a newer release, and installs it for you — the download is verified against its published SHA-256 first. **Options → General:** *Check for updates* (at startup + every 60 min) and, once that is on, *Download updates automatically, then ask before installing*. Downloading is silent; **installing always asks first**, since it closes the app. Decline and the download is kept — you are offered it again later, or from Help → About, without re-downloading |
 
 ### How the video grabber works
 

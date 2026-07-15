@@ -72,7 +72,9 @@ class MagicDownloaderApp(tk.Tk):
         self.manager = DownloadManager()
         self.manager.add_listener(self._schedule_refresh)
         self._filter = FILTER_ALL
-        self._sort_col = "filename"
+        # None = the order downloads were added, which is what the list showed
+        # before any header is clicked.
+        self._sort_col: str | None = None
         self._sort_reverse = False
         self._browser: BrowserAPIServer | None = None
         self._toast_after: str | None = None
@@ -84,6 +86,10 @@ class MagicDownloaderApp(tk.Tk):
         self._capture_active = False
         self._progress_dialogs: dict[str, DownloadProgressDialog] = {}
         self._update_pending = False   # an auto-update is downloading/awaiting idle
+        # (version, installer path) already downloaded and verified but not yet
+        # installed — because the user said "not now". Kept so the next check,
+        # and Help → About, can offer it without downloading it again.
+        self._ready_update: tuple[str, str] | None = None
 
         self._build_menu()
         self._build_toolbar()
@@ -659,7 +665,7 @@ class MagicDownloaderApp(tk.Tk):
         except tk.TclError:
             yview = (0.0, 1.0)
 
-        jobs = self._filtered_jobs()
+        jobs = self._sort_jobs(self._filtered_jobs())
         existing = set(self.tree.get_children())
         job_ids = {j.id for j in jobs}
 
@@ -848,22 +854,66 @@ class MagicDownloaderApp(tk.Tk):
             text=f"{browser_txt}   ·   Connections: {self.manager.settings.get('connections', 8)}"
         )
 
+    def _sort_key(self, job: DownloadJob, col: str):
+        """Sort on the underlying value, not the text in the cell.
+
+        Sorting the displayed strings put "9m 30s" after "10m 00s" and 900 KB/s
+        above 5 MB/s. Every branch returns one consistent type per column so the
+        keys stay comparable.
+        """
+        if col == "size":
+            return float(job.total_size or job.downloaded or 0)
+        if col == "progress":
+            return job.progress
+        if col == "speed":
+            return job.speed_bps
+        if col == "avg":
+            return job.avg_speed_bps
+        if col == "elapsed":
+            return job.active_seconds
+        if col == "eta":
+            eta = job.eta_seconds
+            return eta if eta is not None else float("inf")   # unknown sorts last
+        if col == "date":
+            return float(job.finished_at or job.created_at or 0.0)
+        if col == "conn":
+            return float(job.connections)
+        if col == "folder":
+            try:
+                return str(Path(job.save_path).parent).lower()
+            except Exception:  # noqa: BLE001
+                return ""
+        if col == "status":
+            return job.status.value.lower()
+        if col == "category":
+            return job.category.lower()
+        return job.filename.lower()
+
+    def _sort_jobs(self, jobs: list[DownloadJob]) -> list[DownloadJob]:
+        if not self._sort_col:
+            return jobs
+        return sorted(jobs, key=lambda j: self._sort_key(j, self._sort_col),
+                      reverse=self._sort_reverse)
+
+    def _update_sort_indicators(self) -> None:
+        for key, (label, _w) in self._headings.items():
+            arrow = ""
+            if key == self._sort_col:
+                arrow = "  ▼" if self._sort_reverse else "  ▲"
+            self.tree.heading(key, text=label + arrow)
+
     def _sort_by(self, col: str) -> None:
         if self._sort_col == col:
             self._sort_reverse = not self._sort_reverse
         else:
             self._sort_col = col
             self._sort_reverse = False
-        col_index = COLUMNS.index(col)
-
-        def key_fn(jid: str):
-            vals = self.tree.item(jid, "values")
-            return (vals[col_index] or "").lower() if vals else ""
-
-        items = list(self.tree.get_children(""))
-        items.sort(key=key_fn, reverse=self._sort_reverse)
-        for i, iid in enumerate(items):
-            self.tree.move(iid, "", i)
+        self._update_sort_indicators()
+        # Sorting the tree directly was pointless: _refresh_tree moves every row
+        # back into the manager's order, and it runs on every progress tick — so
+        # the sort visibly reverted within a second. The order has to come from
+        # the job list the refresh renders.
+        self._refresh_tree()
 
     # ── column visibility ───────────────────────────────────────
 
@@ -1477,11 +1527,20 @@ class MagicDownloaderApp(tk.Tk):
         """About box — shows the version and has the update check/install."""
         from magic_downloader import __version__
 
+        ready = self._ready_update
+        if ready and not Path(ready[1]).exists():   # cleaned up behind our back
+            ready = self._ready_update = None
         AboutDialog(
             self, __version__,
             logo=getattr(self, "_brand_emblem", None),
             on_quit=self._quit,
+            ready=ready,
+            on_update_ready=self._remember_ready_update,
         )
+
+    def _remember_ready_update(self, version: str, path: str) -> None:
+        """About downloaded an update and the user chose not to install it yet."""
+        self._ready_update = (version, str(path))
 
     UPDATE_POLL_MS = 60 * 60 * 1000   # re-check every 60 minutes
 
@@ -1516,8 +1575,14 @@ class MagicDownloaderApp(tk.Tk):
                 f"Update available: version {rel.version} — Help → About to install it."
             )
             return
-        # Automatic: fetch it now, install once nothing is downloading.
+        # Automatic: fetch it now, then ASK before installing.
         self._update_pending = True
+        # Fetched earlier and declined — don't download it a second time, just
+        # offer it again.
+        if self._ready_update and self._ready_update[0] == rel.version \
+                and Path(self._ready_update[1]).exists():
+            self._install_when_idle(self._ready_update[1], rel.version)
+            return
         self._show_toast(f"Downloading update {rel.version} in the background…")
 
         def work() -> None:
@@ -1535,33 +1600,49 @@ class MagicDownloaderApp(tk.Tk):
         self._show_toast(f"Automatic update failed: {err[:90]}")
 
     def _install_when_idle(self, path, version: str, announced: bool = False) -> None:
-        """Never interrupt a transfer: hold the verified installer until the
-        queue is idle, then hand off and quit."""
+        """Hold the verified installer until the queue is idle, then ask.
+
+        "Install updates automatically" means the *download* is automatic. The
+        install still gets a yes/no, because it force-closes the app — and
+        answering no keeps the download, so the next poll (or Help → About) can
+        offer it again without re-fetching.
+        """
         from magic_downloader.manager import BUSY_STATUSES
 
         busy = [j for j in self.manager.jobs if j.status in BUSY_STATUSES]
         if busy:
             if not announced:
                 self._show_toast(
-                    f"Update {version} is ready — it will install when your "
-                    f"{len(busy)} active download(s) finish."
+                    f"Update {version} is ready — you'll be asked to install it "
+                    f"when your {len(busy)} active download(s) finish."
                 )
             self.after(15000, lambda: self._install_when_idle(path, version, True))
             return
-        from magic_downloader import updater
+        from magic_downloader import __version__, updater
 
-        # Automatic mode was explicitly opted into, so this doesn't ask — but it
-        # shouldn't yank the window away mid-sentence either. Announce it, give
-        # the toast time to actually be read, then hand off.
-        self._show_toast(
-            f"Installing update {version} now — Magic Downloader will close and reopen."
-        )
+        self._ready_update = (version, str(path))
+        if not messagebox.askyesno(
+            "Install update",
+            f"Version {version} has been downloaded and verified — you have "
+            f"{__version__}.\n\n"
+            "Magic Downloader will close to install it, then reopen.\n\n"
+            "Install it now?",
+            parent=self,
+        ):
+            # Keep it. The next check offers it again, and Help → About can
+            # install it on demand — neither re-downloads.
+            self._update_pending = False
+            self._show_toast(
+                f"Update {version} is downloaded — install it any time from "
+                "Help → About, or you'll be asked again later."
+            )
+            return
         try:
             updater.run_installer(path)
         except Exception as exc:  # noqa: BLE001
             self._update_failed(str(exc))
             return
-        self.after(5000, self._quit)
+        self.after(1500, self._quit)
 
     # ── system tray (: close hides, only Exit quits) ────────────
 

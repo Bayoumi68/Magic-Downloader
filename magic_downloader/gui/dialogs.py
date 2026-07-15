@@ -802,8 +802,10 @@ class SettingsDialog(tk.Toplevel):
         self.auto_install_updates = tk.BooleanVar(
             value=bool(self.settings.get("auto_install_updates", False))
         )
+        # The download is what's automatic. Installing always asks first — it
+        # closes the app — so the label mustn't promise otherwise.
         self.auto_upd_cb = ttk.Checkbutton(
-            f, text="Install updates automatically (waits until downloads finish)",
+            f, text="Download updates automatically, then ask before installing",
             variable=self.auto_install_updates,
         )
         self.auto_upd_cb.grid(row=8, column=0, columnspan=3, sticky="w", padx=(22, 0), pady=2)
@@ -1354,12 +1356,18 @@ class AboutDialog(tk.Toplevel):
 
     def __init__(self, master: tk.Misc, version: str, logo=None,
                  on_quit: Callable[[], None] | None = None,
-                 auto_check: bool = False) -> None:
+                 auto_check: bool = False,
+                 ready: tuple[str, str] | None = None,
+                 on_update_ready: Callable[[str, str], None] | None = None) -> None:
         super().__init__(master)
         self.version = version
         self.on_quit = on_quit
+        # An installer the app already downloaded (version, path) — from the
+        # automatic check, or from a previous "not now". Offer to install that
+        # instead of downloading it again.
+        self.on_update_ready = on_update_ready
+        self._ready_version, self._ready = ready if ready else (None, None)
         self._latest = None
-        self._ready = None      # installer already downloaded + verified
         self._busy = False
         self.title("About Magic Downloader")
         self.configure(bg=T.BG)
@@ -1459,6 +1467,13 @@ class AboutDialog(tk.Toplevel):
                 first = "\n".join(rel.notes.splitlines()[:6])
                 self.notes.configure(text=first)
                 self.notes.pack(fill=tk.X, pady=(6, 0))
+            # Already fetched (automatic check, or a previous "not now") — say
+            # so, and let the button install it rather than re-downloading.
+            if self._ready_for(rel.version):
+                self.status.configure(
+                    text=f"Version {rel.version} is downloaded and ready to "
+                         f"install (you have {self.version}).", fg=T.GREEN)
+                self.update_btn.configure(text="  Install now  ")
             self.update_btn.pack(side=tk.RIGHT, padx=4)
         else:
             self.status.configure(
@@ -1470,9 +1485,9 @@ class AboutDialog(tk.Toplevel):
     def _do_update(self) -> None:
         if self._busy or not self._latest:
             return
-        # Already fetched and verified (the user said "not now" last time) —
-        # don't pull 28 MB down again.
-        if self._ready is not None and Path(self._ready).exists():
+        # Already downloaded and verified — by the automatic check, or because
+        # the user declined the install prompt earlier. Don't fetch it twice.
+        if self._ready_for(self._latest.version):
             self._install(self._ready)
             return
         self._set_busy(True)
@@ -1514,27 +1529,41 @@ class AboutDialog(tk.Toplevel):
         self._ready = path
         self._install(path)
 
+    def _ready_for(self, version: str) -> bool:
+        """True when the installer for *version* is already downloaded.
+
+        The version has to match: reusing a stale file would install the wrong
+        release.
+        """
+        return (self._ready is not None
+                and self._ready_version == version
+                and Path(self._ready).exists())
+
     def _install(self, path) -> None:
         """Ask, then hand off to the installer.
 
-        The installer force-closes Magic Downloader to replace its files, so
-        this prompt is the last moment the user can say no — going straight from
-        a download to a dead app is rude, however much they asked for the update.
+        Downloading is harmless and can be silent; installing is not — it
+        force-closes the app. So the question comes here, once there's something
+        to actually decide about, and "No" keeps the download for later.
         """
         ver = self._latest.version if self._latest else ""
         self.status.configure(text="Download verified.", fg=T.GREEN)
         if not messagebox.askyesno(
             "Install update",
             f"Version {ver} has been downloaded and verified.\n\n"
-            "Magic Downloader has to close while it installs, and any active "
-            "downloads will stop (you can resume them afterwards).\n\n"
+            "Magic Downloader will close to install it, then reopen. Any "
+            "downloads still running will stop — you can resume them "
+            "afterwards.\n\n"
             "Install it now?",
             parent=self,
         ):
+            self._ready, self._ready_version = path, ver
             self.status.configure(
                 text=f"Version {ver} is downloaded and ready — click "
                      "“Install now” whenever it suits you.", fg=T.FG_MUTED)
             self.update_btn.configure(text="  Install now  ")
+            if self.on_update_ready:
+                self.on_update_ready(ver, path)   # let the app keep it too
             return
         self.status.configure(
             text="Starting the installer — Magic Downloader will close.", fg=T.GREEN)
