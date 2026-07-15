@@ -86,12 +86,46 @@ def _published_sha256(timeout: int = TIMEOUT) -> str | None:
     return None
 
 
+def _file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest().lower()
+
+
+def cached_installer(timeout: int = TIMEOUT) -> Path | None:
+    """An already-downloaded installer for the *current* latest release.
+
+    Returned only when its SHA-256 still matches the published one, which makes
+    this both an identity check (it's the release we're about to install) and an
+    integrity check. Lets a decline survive a restart without re-fetching ~28 MB.
+    Returns None if there's nothing usable.
+    """
+    dest = DATA_ROOT / "updates" / INSTALLER_NAME
+    if not dest.exists():
+        return None
+    try:
+        expected = _published_sha256(timeout=timeout)
+        if not expected:
+            return None                       # can't prove what it is
+        return dest if _file_sha256(dest) == expected else None
+    except OSError:
+        return None
+
+
+class DownloadCancelled(Exception):
+    """The caller asked to stop the update download."""
+
+
 def download_installer(
     progress: Callable[[int, int], None] | None = None,
     timeout: int = TIMEOUT,
+    cancel_check: Callable[[], bool] | None = None,
 ) -> Path:
     """Download the latest installer and verify it against the published
-    SHA-256. Returns the file path. Raises on network/checksum failure."""
+    SHA-256. Returns the file path. Raises on network/checksum failure, or
+    DownloadCancelled if *cancel_check* starts returning True."""
     dest_dir = DATA_ROOT / "updates"
     dest_dir.mkdir(parents=True, exist_ok=True)
     dest = dest_dir / INSTALLER_NAME
@@ -104,6 +138,10 @@ def download_installer(
         total = int(r.headers.get("Content-Length") or 0)
         with open(tmp, "wb") as f:
             for chunk in r.iter_content(256 * 1024):
+                if cancel_check and cancel_check():
+                    f.close()
+                    tmp.unlink(missing_ok=True)   # don't leave a part-file behind
+                    raise DownloadCancelled()
                 if not chunk:
                     continue
                 f.write(chunk)

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 import sys
 import threading
@@ -90,6 +91,8 @@ class MagicDownloaderApp(tk.Tk):
         # installed — because the user said "not now". Kept so the next check,
         # and Help → About, can offer it without downloading it again.
         self._ready_update: tuple[str, str] | None = None
+        self._update_cancel = False    # set by Cancel; read by the download thread
+        self._upd_version = ""
 
         self._build_menu()
         self._build_toolbar()
@@ -347,7 +350,10 @@ class MagicDownloaderApp(tk.Tk):
         xscroll.pack(side=tk.BOTTOM, fill=tk.X)
         self.tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         yscroll.pack(side=tk.RIGHT, fill=tk.Y)
-        self._apply_visible_columns(self._load_visible_columns())
+        self._col_order = self._load_column_order()
+        self._visible_cols = self._load_visible_columns()
+        self._apply_columns()
+        self._apply_column_widths()
 
         # Row tags for status colors
         self.tree.tag_configure("Downloading", foreground=T.GREEN)
@@ -362,6 +368,10 @@ class MagicDownloaderApp(tk.Tk):
         self.tree.bind("<<TreeviewSelect>>", lambda e: self._on_selection_change())
         self.tree.bind("<Double-1>", lambda e: self._on_double_click())
         self.tree.bind("<Button-3>", self._context_menu)
+        self._drag_col: str | None = None
+        self._drag_resizing = False
+        self.tree.bind("<ButtonPress-1>", self._heading_press, add="+")
+        self.tree.bind("<ButtonRelease-1>", self._heading_release, add="+")
 
         self._ctx = tk.Menu(self, tearoff=0)
         self._ctx.add_command(label="▶  Resume / Start", command=self._resume_selected)
@@ -466,6 +476,23 @@ class MagicDownloaderApp(tk.Tk):
             padx=12,
             pady=6,
         )
+
+        # Update-download strip. An automatic download used to be invisible
+        # apart from one toast: on a slow line nothing said it was happening,
+        # and there was no way to stop it. Hidden until a download starts.
+        self._upd_frame = tk.Frame(self, bg=T.BG_STATUS, height=30)
+        self._upd_frame.pack_propagate(False)
+        self.update_var = tk.StringVar(value="")
+        tk.Label(
+            self._upd_frame, textvariable=self.update_var, bg=T.BG_STATUS,
+            fg=T.FG, font=T.FONT_SMALL, anchor="w",
+        ).pack(side=tk.LEFT, padx=10)
+        ttk.Button(
+            self._upd_frame, text="Cancel", width=8,
+            command=self._cancel_update_download,
+        ).pack(side=tk.RIGHT, padx=10, pady=2)
+        self._upd_bar = ProgressBar(self._upd_frame, height=10)
+        self._upd_bar.pack(side=tk.RIGHT, fill=tk.X, expand=True, padx=10, pady=8)
 
     # ── filtering ───────────────────────────────────────────────────────
 
@@ -915,10 +942,15 @@ class MagicDownloaderApp(tk.Tk):
         # the job list the refresh renders.
         self._refresh_tree()
 
-    # ── column visibility ───────────────────────────────────────
+    # ── column layout: order, visibility, widths ────────────────
+    #
+    # Two separate things, kept apart on purpose: _col_order is where every
+    # column sits (including hidden ones), _visible_cols is which are shown.
+    # Keeping the order for hidden columns means re-showing one puts it back
+    # where it was, instead of teleporting it to the end.
 
     def _load_visible_columns(self) -> list[str]:
-        """Saved choice, filtered to columns that still exist.
+        """Saved visible set, filtered to columns that still exist.
 
         Empty/absent means "show everything" — so columns added by a later
         version appear for anyone who never customised the list.
@@ -927,28 +959,117 @@ class MagicDownloaderApp(tk.Tk):
                  if c in COLUMNS]
         return saved or list(COLUMNS)
 
-    def _apply_visible_columns(self, visible: list[str]) -> None:
-        # Keep the grid's own order regardless of what order they were saved in.
-        cols = [c for c in COLUMNS if c in visible]
+    def _load_column_order(self) -> list[str]:
+        """Saved order, plus any column the saved order predates."""
+        saved = [c for c in (self.manager.settings.get("column_order") or [])
+                 if c in COLUMNS]
+        return saved + [c for c in COLUMNS if c not in saved]
+
+    def _apply_columns(self) -> None:
+        cols = [c for c in self._col_order if c in self._visible_cols]
         if ALWAYS_SHOWN not in cols:
             cols.insert(0, ALWAYS_SHOWN)
         self._visible_cols = cols
         self.tree.configure(displaycolumns=cols)
         self._col_vars = {c: tk.BooleanVar(value=c in cols) for c in COLUMNS}
 
+    def _apply_visible_columns(self, visible: list[str]) -> None:
+        self._visible_cols = list(visible)
+        if not getattr(self, "_col_order", None):
+            self._col_order = list(COLUMNS)
+        self._apply_columns()
+
+    def _apply_column_widths(self) -> None:
+        saved = self.manager.settings.get("column_widths") or {}
+        for key, (_label, default) in self._headings.items():
+            try:
+                self.tree.column(key, width=int(saved.get(key, default)))
+            except (tk.TclError, TypeError, ValueError):
+                pass
+
+    def _save_columns(self) -> None:
+        s = self.manager.settings
+        s["column_order"] = list(self._col_order)
+        s["visible_columns"] = list(self._visible_cols)
+        widths = {}
+        for key in COLUMNS:
+            try:
+                widths[key] = int(self.tree.column(key, "width"))
+            except (tk.TclError, TypeError, ValueError):
+                pass
+        # Hidden columns report a stale width; keep what was saved for them.
+        old = self.manager.settings.get("column_widths") or {}
+        for key in COLUMNS:
+            if key not in self._visible_cols and key in old:
+                widths[key] = old[key]
+        s["column_widths"] = widths
+        self.manager.save_settings()
+
     def _toggle_column(self, key: str) -> None:
         visible = [c for c in COLUMNS if self._col_vars[c].get()]
         if not visible:                      # unticked the last one — undo it
             self._col_vars[key].set(True)
             return
-        self._apply_visible_columns(visible)
-        self.manager.settings["visible_columns"] = self._visible_cols
-        self.manager.save_settings()
+        self._visible_cols = visible
+        self._apply_columns()
+        self._save_columns()
 
     def _show_all_columns(self) -> None:
-        self._apply_visible_columns(list(COLUMNS))
-        self.manager.settings["visible_columns"] = list(COLUMNS)
-        self.manager.save_settings()
+        self._visible_cols = list(COLUMNS)
+        self._apply_columns()
+        self._save_columns()
+
+    def _reset_columns(self) -> None:
+        self._col_order = list(COLUMNS)
+        self._visible_cols = list(COLUMNS)
+        self._apply_columns()
+        for key, (_label, default) in self._headings.items():
+            try:
+                self.tree.column(key, width=default)
+            except tk.TclError:
+                pass
+        self.manager.settings["column_widths"] = {}
+        self._save_columns()
+
+    # ── drag a heading to move a column ─────────────────────────
+    #
+    # ttk::treeview can't reorder columns itself, so this does it. Releasing
+    # over a *different* heading fires no heading command, so a drag can't be
+    # mistaken for a click-to-sort — verified against Tk 8.6.
+
+    def _heading_press(self, event: tk.Event) -> None:
+        self._drag_col = None
+        self._drag_resizing = False
+        region = self.tree.identify_region(event.x, event.y)
+        if region == "separator":
+            self._drag_resizing = True       # a width drag; save it on release
+            return
+        if region != "heading":
+            return
+        try:
+            self._drag_col = self.tree.column(self.tree.identify_column(event.x), "id")
+        except tk.TclError:
+            self._drag_col = None
+
+    def _heading_release(self, event: tk.Event) -> None:
+        if self._drag_resizing:
+            self._drag_resizing = False
+            self._save_columns()             # remember the new width
+            return
+        src, self._drag_col = self._drag_col, None
+        if not src or self.tree.identify_region(event.x, event.y) != "heading":
+            return
+        try:
+            dst = self.tree.column(self.tree.identify_column(event.x), "id")
+        except tk.TclError:
+            return
+        if not dst or dst == src:
+            return                           # a plain click — that's the sort
+        order = [c for c in self._col_order if c != src]
+        order.insert(order.index(dst), src)
+        self._col_order = order
+        self._apply_columns()
+        self._save_columns()
 
     def _columns_menu(self, event: tk.Event) -> None:
         m = tk.Menu(self, tearoff=0)
@@ -962,6 +1083,7 @@ class MagicDownloaderApp(tk.Tk):
                               command=lambda k=key: self._toggle_column(k))
         m.add_separator()
         m.add_command(label="Show all columns", command=self._show_all_columns)
+        m.add_command(label="Reset columns", command=self._reset_columns)
         m.tk_popup(event.x_root, event.y_root)
 
     def _context_menu(self, event: tk.Event) -> None:
@@ -1567,8 +1689,62 @@ class MagicDownloaderApp(tk.Tk):
 
         threading.Thread(target=work, daemon=True).start()
 
+    # ── update download progress ────────────────────────────────
+
+    def _download_started(self, version: str) -> None:
+        self._update_cancel = False
+        self._upd_version = version
+        self.update_var.set(f"Downloading update {version}…")
+        self._upd_bar.set_progress(0, active=True)
+        try:
+            self._upd_frame.pack(fill=tk.X, side=tk.BOTTOM, before=self._status_frame)
+        except Exception:  # noqa: BLE001
+            self._upd_frame.pack(fill=tk.X, side=tk.BOTTOM)
+
+    def _update_progress(self, done: int, total: int) -> None:
+        if not self._upd_frame.winfo_manager():
+            return
+        pct = (done / total * 100.0) if total else 0.0
+        self._upd_bar.set_progress(pct, active=True)
+        self.update_var.set(
+            f"Downloading update {self._upd_version}…  {format_bytes(done)}"
+            + (f" / {format_bytes(total)}  ({pct:.0f}%)" if total else "")
+        )
+
+    def _hide_update_progress(self) -> None:
+        try:
+            self._upd_frame.pack_forget()
+        except tk.TclError:
+            pass
+
+    def _cancel_update_download(self) -> None:
+        """Stop the download. The worker notices and unwinds; it can't be
+        interrupted from here."""
+        self._update_cancel = True
+        self.update_var.set("Cancelling…")
+
+    def _update_download_cancelled(self) -> None:
+        self._update_cancel = False
+        self._update_pending = False
+        self._hide_update_progress()
+        self._show_toast("Update download cancelled.")
+
+    # ── update prompt ───────────────────────────────────────────
+
+    def _is_skipped(self, version: str) -> bool:
+        """The user said "skip this version" — don't raise it again, ever.
+
+        Checked before the prompt (not before the check), so Help → About still
+        finds and installs it on demand.
+        """
+        return str(self.manager.settings.get("skipped_update") or "") == version
+
+    def _skip_version(self, version: str) -> None:
+        self.manager.settings["skipped_update"] = version
+        self.manager.save_settings()
+
     def _on_update_found(self, rel) -> None:
-        if self._update_pending:
+        if self._update_pending or self._is_skipped(rel.version):
             return
         if not self.manager.settings.get("auto_install_updates", False):
             self._show_toast(
@@ -1577,19 +1753,33 @@ class MagicDownloaderApp(tk.Tk):
             return
         # Automatic: fetch it now, then ASK before installing.
         self._update_pending = True
-        # Fetched earlier and declined — don't download it a second time, just
-        # offer it again.
+        # Already have it: from earlier in this run, or still on disk from a
+        # previous one (verified against the published checksum). Either way,
+        # don't pull ~28 MB down again just because the app restarted.
+        have = None
         if self._ready_update and self._ready_update[0] == rel.version \
                 and Path(self._ready_update[1]).exists():
-            self._install_when_idle(self._ready_update[1], rel.version)
+            have = self._ready_update[1]
+        if have:
+            self._install_when_idle(have, rel.version, notes=rel.notes)
             return
-        self._show_toast(f"Downloading update {rel.version} in the background…")
 
         def work() -> None:
             from magic_downloader import updater
             try:
-                path = updater.download_installer(timeout=30)
-                self.after(0, lambda: self._install_when_idle(path, rel.version))
+                path = updater.cached_installer(timeout=20)
+                if path is None:
+                    self.after(0, lambda: self._download_started(rel.version))
+                    path = updater.download_installer(
+                        timeout=30,
+                        progress=lambda d, t: self.after(
+                            0, lambda d=d, t=t: self._update_progress(d, t)),
+                        cancel_check=lambda: self._update_cancel,
+                    )
+                self.after(0, lambda p=path: self._install_when_idle(
+                    p, rel.version, notes=rel.notes))
+            except updater.DownloadCancelled:
+                self.after(0, self._update_download_cancelled)
             except Exception as exc:  # noqa: BLE001
                 self.after(0, lambda e=exc: self._update_failed(str(e)))
 
@@ -1597,15 +1787,45 @@ class MagicDownloaderApp(tk.Tk):
 
     def _update_failed(self, err: str) -> None:
         self._update_pending = False
+        self._hide_update_progress()
         self._show_toast(f"Automatic update failed: {err[:90]}")
 
-    def _install_when_idle(self, path, version: str, announced: bool = False) -> None:
+    @staticmethod
+    def _plain_notes(notes: str, max_lines: int = 5, width: int = 110) -> str:
+        """Release notes condensed for a message box.
+
+        They're published as GitHub markdown: strip the markup rather than show
+        a wall of asterisks, and keep it short. The dialog wraps at 400px, so a
+        few untrimmed paragraphs would make it taller than the screen.
+        """
+        out: list[str] = []
+        for raw in (notes or "").splitlines():
+            line = raw.strip()
+            if not line:
+                continue
+            line = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", line)   # links -> text
+            line = re.sub(r"[*_`#]+", "", line).strip()
+            line = re.sub(r"^[-•]\s*", "", line).strip()
+            if not line:
+                continue
+            # The heading just repeats the version we've already named.
+            if re.fullmatch(r"Magic Downloader[\sv\d.]*", line, re.IGNORECASE):
+                continue
+            if len(line) > width:
+                line = line[:width].rsplit(" ", 1)[0] + "…"
+            out.append("• " + line)
+            if len(out) >= max_lines:
+                break
+        return "\n".join(out)
+
+    def _install_when_idle(self, path, version: str, announced: bool = False,
+                           notes: str = "") -> None:
         """Hold the verified installer until the queue is idle, then ask.
 
-        "Install updates automatically" means the *download* is automatic. The
-        install still gets a yes/no, because it force-closes the app — and
-        answering no keeps the download, so the next poll (or Help → About) can
-        offer it again without re-fetching.
+        "Download updates automatically" means the *download* is automatic. The
+        install always asks, because it force-closes the app. "Not now" keeps
+        the download for the next check; "Skip this version" retires it for good
+        (Help → About can still install it on demand).
         """
         from magic_downloader.manager import BUSY_STATUSES
 
@@ -1616,21 +1836,34 @@ class MagicDownloaderApp(tk.Tk):
                     f"Update {version} is ready — you'll be asked to install it "
                     f"when your {len(busy)} active download(s) finish."
                 )
-            self.after(15000, lambda: self._install_when_idle(path, version, True))
+            self.after(15000,
+                       lambda: self._install_when_idle(path, version, True, notes))
             return
         from magic_downloader import __version__, updater
 
+        self._hide_update_progress()
         self._ready_update = (version, str(path))
-        if not messagebox.askyesno(
+        summary = self._plain_notes(notes)
+        answer = messagebox.ask(
             "Install update",
             f"Version {version} has been downloaded and verified — you have "
-            f"{__version__}.\n\n"
-            "Magic Downloader will close to install it, then reopen.\n\n"
-            "Install it now?",
+            f"{__version__}."
+            + (f"\n\nWhat's new:\n{summary}" if summary else "")
+            + "\n\nMagic Downloader will close to install it, then reopen.",
+            buttons=[("Install now", "install"),
+                     ("Not now", "later"),
+                     ("Skip this version", "skip")],
             parent=self,
-        ):
-            # Keep it. The next check offers it again, and Help → About can
-            # install it on demand — neither re-downloads.
+        )
+        if answer == "skip":
+            self._skip_version(version)
+            self._update_pending = False
+            self._show_toast(
+                f"Skipping version {version} — you won't be asked about it "
+                "again. Help → About can still install it."
+            )
+            return
+        if answer != "install":          # "Not now", Escape, or closed
             self._update_pending = False
             self._show_toast(
                 f"Update {version} is downloaded — install it any time from "

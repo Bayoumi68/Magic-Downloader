@@ -39,13 +39,21 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     # Empty means every column, so ones added by a later version show up for
     # anyone who hasn't picked their own set.
     "visible_columns": [],
+    # Left-to-right order of the columns (drag a heading to move one), and their
+    # pixel widths. Empty = the built-in layout.
+    "column_order": [],
+    "column_widths": {},
     # Look for a newer release at startup and every 60 minutes (a toast, never
     # a popup). Turn off in Options → General.
     "check_updates": True,
-    # Download + install a newer release without asking. Only honoured when
-    # check_updates is on, and it always waits until no download is running so
-    # the installer (which closes the app) can't interrupt a transfer.
+    # Download a newer release in the background, then ask before installing.
+    # Only honoured when check_updates is on, and it always waits until no
+    # download is running so the installer (which closes the app) can't
+    # interrupt a transfer. The install itself is never automatic.
     "auto_install_updates": False,
+    # A version the user chose to skip; never prompt for it again (Help → About
+    # still installs it on demand).
+    "skipped_update": "",
     # Keep running in the system tray when the window is closed;
     # only "Exit" actually quits.
     "close_to_tray": True,

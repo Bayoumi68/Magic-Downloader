@@ -8,7 +8,7 @@ A **fast, multi-connection** download manager for Windows, with a **real browser
 [![Downloads](https://img.shields.io/github/downloads/Bayoumi68/Magic-Downloader/total)](https://github.com/Bayoumi68/Magic-Downloader/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-## ⬇️ Download — latest version: **v0.5.18**
+## ⬇️ Download — latest version: **v0.5.19**
 
 **[Get the latest release →](https://github.com/Bayoumi68/Magic-Downloader/releases/latest)**
 
@@ -36,12 +36,12 @@ _These links always point to the newest version (the filenames never change):_
 | **Multi-connection downloads** | Split files (and stream segments) into parallel connections for higher speed |
 | **Pause / Resume** | Stop and continue downloads; partial files and stream segments are kept |
 | **Queue** | Multiple downloads managed together |
-| **Progress UI** | Filename, folder, size, status, progress, speed, **average speed**, **elapsed**, time left, **date**, connections, category — plus the segment map. **Right-click the list header** to show/hide any column; your choice is remembered. Average speed and elapsed are measured over the time actually spent transferring, so a paused download doesn't report a misleading figure, and both stay on screen after the download finishes |
+| **Progress UI** | Filename, folder, size, status, progress, speed, average speed, elapsed, time left, date, connections, category — plus the segment map. **Right-click the header** to show/hide columns, **drag a heading** to move one, and drag a separator to resize: the layout is remembered. Average speed and elapsed count only the time actually spent transferring, so a paused download doesn't report a misleading figure, and both stay on screen once it finishes |
 | **Categories** | Save to folders by type (General, Compressed, Documents, Music, Video) |
 | **Browser integration** | Chrome/Edge/Brave extension: network media sniffing, right-click links, capture browser downloads |
 | **History** | Completed downloads listed; open file / folder |
 | **Settings** | Connections per download, max simultaneous downloads, default save path |
-| **In-app updates** | **Help → About** shows your version, checks for a newer release, and installs it for you — the download is verified against its published SHA-256 first. **Options → General:** *Check for updates* (at startup + every 60 min) and, once that is on, *Download updates automatically, then ask before installing*. Downloading is silent; **installing always asks first**, since it closes the app. Decline and the download is kept — you are offered it again later, or from Help → About, without re-downloading |
+| **In-app updates** | **Help → About** shows your version, checks for a newer release and installs it — verified against its published SHA-256 first. **Options → General:** *Check for updates* (at startup + hourly) and, once that is on, *Download updates automatically, then ask before installing* — with progress and a cancel. Downloading is silent; **installing always asks**, since it closes the app. **Not now** keeps the download (offered again later, or from About — never re-downloaded, even across a restart); **Skip this version** retires it for good |
 
 ### How the video grabber works
 
