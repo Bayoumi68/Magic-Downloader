@@ -2,7 +2,7 @@
 
 Turns a manifest URL into a single playable file by:
   1. Fetching + parsing the manifest, choosing the best video (+ audio) track.
-  2. Downloading every segment in parallel (multi-connection, IDM-style),
+  2. Downloading every segment in parallel (multi-connection),
      decrypting AES-128 HLS segments on the fly.
   3. Assembling: concatenate each track's segments, then mux video+audio into
      an MP4 with ffmpeg. Without ffmpeg it degrades gracefully to a raw

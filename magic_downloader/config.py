@@ -35,12 +35,12 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "default_video_quality": "best",  # best | ask | 2160 | 1440 | 1080 | 720 | 480 | 360 | audio
     # UX
     "confirm_delete": True,
-    # Keep running in the system tray when the window is closed (IDM-style);
+    # Keep running in the system tray when the window is closed;
     # only "Exit" actually quits.
     "close_to_tray": True,
     "minimize_to_tray": False,  # also hide to tray on the minimize button
     "last_save_dir": "",        # remember the folder the user last downloaded to
-    # Pop a separate progress window for each download (IDM-style)
+    # Pop a separate progress window for each download
     "show_progress_dialog": True,
     "progress_close_on_complete": False,
     "category_paths": {
@@ -50,7 +50,7 @@ DEFAULT_SETTINGS: dict[str, Any] = {
         "Music": str(DOWNLOADS_DIR / "Music"),
         "Video": str(DOWNLOADS_DIR / "Video"),
     },
-    # Extensions that map a downloaded file to a category (IDM "File Types").
+    # Extensions that map a downloaded file to a category ("File Types").
     "category_extensions": {
         "Compressed": [".zip", ".rar", ".7z", ".tar", ".gz", ".bz2", ".xz", ".iso"],
         "Documents": [".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".txt", ".rtf", ".odt"],
@@ -62,7 +62,7 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "browser_port": 7373,
     "browser_token": "",  # optional shared secret; leave empty for local-only trust
     "browser_auto_start": True,  # start download immediately when captured from browser
-    # Show the IDM-style "Download File Info" dialog (name/category/folder) for
+    # Show the "Download File Info" dialog (name/category/folder) for
     # downloads captured from the browser, instead of starting them silently.
     "confirm_browser_captures": True,
 }

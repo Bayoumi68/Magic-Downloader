@@ -14,7 +14,7 @@ class MediaKind(str, Enum):
     HTTP = "http"   # progressive file: direct download (mp4, mp3, zip, ...)
     HLS = "hls"     # HTTP Live Streaming manifest (.m3u8)
     DASH = "dash"   # MPEG-DASH manifest (.mpd)
-    PAGE = "page"   # a web page whose video yt-dlp should extract (YouTube, …)
+    PAGE = "page"   # a web page whose video yt-dlp should extract (supported sites)
 
 
 # Extensions that indicate a progressive media *file* (worth a video badge)

@@ -164,7 +164,7 @@ function renderItem(item) {
     return block;
   }
 
-  // A real, scrollable list of every quality/format (IDM-style).
+  // A real, scrollable list of every quality/format.
   const list = document.createElement("div");
   list.className = "formats";
   list.innerHTML = '<div class="floading">Loading formats…</div>';

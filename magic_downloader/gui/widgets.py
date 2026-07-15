@@ -44,7 +44,7 @@ class ProgressBar(tk.Canvas):
 
 
 class SegmentBar(tk.Canvas):
-    """IDM-style multi-connection segment map (green blocks)."""
+    """multi-connection segment map (green blocks)."""
 
     def __init__(self, master: tk.Misc, height: int = 28, **kwargs) -> None:
         super().__init__(

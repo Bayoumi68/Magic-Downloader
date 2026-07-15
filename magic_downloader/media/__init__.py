@@ -1,6 +1,6 @@
 """Media handling: streaming-video detection and HLS/DASH download support.
 
-This package turns Magic Downloader into an IDM-style video grabber. The
+This package turns Magic Downloader into a video grabber. The
 browser extension sniffs media URLs from network traffic; this package knows
 how to classify them (``detect``) and, for streaming manifests, download all
 segments and mux them into a single playable file (via :mod:`ffmpeg`).

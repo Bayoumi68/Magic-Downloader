@@ -4,7 +4,7 @@
 ; Output:  installer\MagicDownloader-Setup-<version>.exe
 
 #define MyAppName "Magic Downloader"
-#define MyAppVersion "0.5.10"
+#define MyAppVersion "0.5.11"
 #define MyAppPublisher "Magic Downloader"
 #define MyAppExeName "MagicDownloader.exe"
 
@@ -70,7 +70,7 @@ Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#MyAppName}}
 
 [Code]
 // Magic Downloader keeps running in the system tray when its window is closed
-// (IDM-style), so an upgrade finds MagicDownloader.exe + its _internal files
+//, so an upgrade finds MagicDownloader.exe + its _internal files
 // locked by that background process. A graceful close just hides it to tray,
 // so we FORCE-terminate it (taskkill /F, which bypasses the tray behaviour)
 // as early as possible — before any wizard page and before any file is

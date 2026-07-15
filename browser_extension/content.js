@@ -1,5 +1,5 @@
 /**
- * Magic Downloader — on-page controls (the visible "IDM" experience).
+ * Magic Downloader — on-page controls (the visible download-button experience).
  *
  *  • A "⬇ Download" button appears on every <video> player (top-right).
  *  • A floating action button (bottom-right) shows how many videos/streams the
@@ -51,7 +51,7 @@
   const sendUrl = (url, opts) => msg({ type: "add", url, opts });
 
   // Tell the background this page is showing a video → enables the yt-dlp
-  // "download this page's video" path (the only thing that works on YouTube).
+  // "download this page's video" path (the only thing that works on such sites).
   let lastReported = "";
   function reportPageVideo() {
     const key = location.href + "|" + document.title;

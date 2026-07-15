@@ -1,4 +1,4 @@
-"""IDM-inspired colors and fonts."""
+"""classic colors and fonts."""
 
 # Classic download-manager palette (blue chrome + light list)
 BG = "#e8eef5"

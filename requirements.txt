@@ -1,6 +1,6 @@
-# Magic Downloader — IDM-style multi-connection download manager
+# Magic Downloader — fast multi-connection download manager
 requests>=2.31.0
-# YouTube / Vimeo / ~1800 sites: extract + download page videos with every
+# ~1800 supported sites: extract + download page videos with every
 # available quality and format. This is what makes "download button on videos"
 # work on sites that hide their streams (no catchable manifest).
 yt-dlp>=2025.1.1
@@ -8,13 +8,13 @@ yt-dlp>=2025.1.1
 # Without it, unencrypted streams still work; encrypted ones will report a
 # clear "install cryptography" error.
 cryptography>=42.0.0
-# System-tray icon (IDM-style "keep running when closed"). Pillow renders the
+# System-tray icon (keep running when closed). Pillow renders the
 # tray/app icon. Both are optional — without them the app just exits on close.
 pystray>=0.19.0
 Pillow>=10.0.0
 #
 # External tool (not a pip package): ffmpeg — auto-detected on PATH, or install
 # it from the app: Options → Video → "Install ffmpeg automatically".
-# Needed to merge video+audio into a clean .mp4 (YouTube's best formats, DASH,
+# Needed to merge video+audio into a clean .mp4 (the best formats, DASH,
 # fMP4 HLS). Without ffmpeg the app falls back to a lower single-file quality
 # or a raw .ts.

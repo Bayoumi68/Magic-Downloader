@@ -1,7 +1,7 @@
 """Probe a manifest URL to discover kind, available qualities and duration.
 
 Used by the ``/api/probe`` endpoint so the browser 'download panel' can offer a
-quality picker (1080p / 720p / …) before the download starts — just like IDM.
+quality picker (1080p / 720p / …) before the download starts.
 Kept lightweight: one or two small HTTP GETs, no segment downloads.
 """
 

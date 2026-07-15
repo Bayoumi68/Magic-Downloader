@@ -1,7 +1,7 @@
 """A shared, thread-safe download speed limiter (token bucket).
 
 One instance is shared by every active download thread so the configured cap is
-an *aggregate* limit across the whole app — matching IDM's global speed limiter.
+an *aggregate* limit across the whole app — matching a global speed limiter.
 A rate of 0 means unlimited.
 """
 

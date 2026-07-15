@@ -121,7 +121,7 @@ class DownloadManager:
 
     def suggest_capture(self, data: dict) -> dict:
         """Compute a suggested job spec from an extension payload — NO side
-        effects. Used both by :meth:`add_from_browser` and by the IDM-style
+        effects. Used both by :meth:`add_from_browser` and by the 
         capture dialog (which lets the user edit before committing).
         """
         url = str(data.get("url") or "").strip()
@@ -605,7 +605,7 @@ class DownloadManager:
                 self._persist(force=True)
         self.start_job(job_id)
 
-    # ── file operations on a job (IDM right-click menu) ──────────────────
+    # ── file operations on a job (right-click menu) ──────────────────
 
     @staticmethod
     def _sanitize_name(name: str) -> str:
@@ -677,6 +677,25 @@ class DownloadManager:
                 return False, str(exc)
             job.save_path = str(new)
             self._persist(force=True)
+        self._notify()
+        return True, ""
+
+    def move_to_category(self, job_id: str, category: str) -> tuple[bool, str]:
+        """Move a job's file into *category*'s folder and re-tag the job."""
+        category = (category or "").strip()
+        if not category:
+            return False, "Choose a category."
+        folder = (self.settings.get("category_paths") or {}).get(category)
+        if not folder:
+            folder = str(Path(self.settings.get("default_save_path") or ".") / category)
+        ok, err = self.move_job(job_id, folder)   # moves file + updates save_path
+        if not ok:
+            return False, err
+        with self._lock:
+            job = self.get_job(job_id)
+            if job:
+                job.category = category
+                self._persist(force=True)
         self._notify()
         return True, ""
 

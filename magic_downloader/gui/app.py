@@ -1,4 +1,4 @@
-"""Main window — Internet Download Manager style layout."""
+"""Main window — classic download-manager layout."""
 
 from __future__ import annotations
 
@@ -236,7 +236,7 @@ class MagicDownloaderApp(tk.Tk):
         body = tk.Frame(self, bg=T.BG)
         body.pack(fill=tk.BOTH, expand=True)
 
-        # ── Left category sidebar (IDM hallmark) ──
+        # ── Left category sidebar (hallmark) ──
         side = tk.Frame(body, bg=T.BG_SIDEBAR, width=200)
         side.pack(side=tk.LEFT, fill=tk.Y)
         side.pack_propagate(False)
@@ -351,13 +351,15 @@ class MagicDownloaderApp(tk.Tk):
         self._ctx.add_separator()
         self._ctx.add_command(label="✏  Rename…", command=self._rename_selected)
         self._ctx.add_command(label="📁  Move to…", command=self._move_selected)
+        self._ctx_cat = tk.Menu(self._ctx, tearoff=0)
+        self._ctx.add_cascade(label="🏷  Move to category", menu=self._ctx_cat)
         self._ctx.add_command(label="📄  Open file", command=self._open_file)
         self._ctx.add_command(label="📂  Open folder", command=self._open_folder)
         self._ctx.add_separator()
         self._ctx.add_command(label="🗑  Delete from list", command=self._delete_selected)
         self._ctx.add_command(label="🗑  Delete + remove files", command=self._delete_with_files)
 
-        # ── Bottom detail panel (IDM-style) ──
+        # ── Bottom detail panel ──
         tk.Frame(right, bg=T.BORDER, height=1).pack(fill=tk.X)
         detail = tk.Frame(right, bg=T.BG_DETAIL, height=150)
         detail.pack(fill=tk.X, side=tk.BOTTOM)
@@ -388,7 +390,7 @@ class MagicDownloaderApp(tk.Tk):
         )
         self.detail_stats.pack(fill=tk.X)
 
-        # Right: segment map (signature IDM look)
+        # Right: segment map (signature look)
         seg_fr = tk.Frame(detail, bg=T.BG_DETAIL, width=320)
         seg_fr.pack(side=tk.RIGHT, fill=tk.Y, padx=12, pady=8)
         seg_fr.pack_propagate(False)
@@ -601,7 +603,7 @@ class MagicDownloaderApp(tk.Tk):
             self._open_progress(job.id)
 
     def _open_progress(self, job_id: str) -> None:
-        """Pop (or focus) a per-download progress window, IDM-style."""
+        """Pop (or focus) a per-download progress window."""
         if not self.manager.settings.get("show_progress_dialog", True):
             return
         existing = self._progress_dialogs.get(job_id)
@@ -840,7 +842,35 @@ class MagicDownloaderApp(tk.Tk):
         if row:
             if row not in self.tree.selection():
                 self.tree.selection_set(row)
+            self._sync_category_menu()
             self._ctx.tk_popup(event.x_root, event.y_root)
+
+    def _sync_category_menu(self) -> None:
+        """Rebuild the 'Move to category' submenu from the current categories."""
+        self._ctx_cat.delete(0, tk.END)
+        cats = list((self.manager.settings.get("category_paths") or {}).keys())
+        if not cats:
+            self._ctx_cat.add_command(label="(no categories)", state="disabled")
+            return
+        for c in cats:
+            icon = self._CAT_ICONS.get(c, "📂")
+            self._ctx_cat.add_command(
+                label=f"{icon}  {c}", command=lambda cc=c: self._move_selected_to_category(cc)
+            )
+
+    def _move_selected_to_category(self, category: str) -> None:
+        ids = self._selected_ids()
+        if not ids:
+            return
+        failed = []
+        for jid in ids:
+            ok, err = self.manager.move_to_category(jid, category)
+            if not ok:
+                job = self.manager.get_job(jid)
+                failed.append(f"{job.filename if job else jid}: {err}")
+        if failed:
+            messagebox.showerror("Move to category", "\n".join(failed[:5]), parent=self)
+        self._refresh_all()
 
     # ── sidebar (category folders) right-click ───────────────────────────
 
@@ -1022,7 +1052,7 @@ class MagicDownloaderApp(tk.Tk):
                        add_category=self.manager.add_category)
 
     def _show_capture_dialog(self, spec: dict) -> None:
-        # One dialog per captured file (IDM-style), shown one at a time.
+        # One dialog per captured file, shown one at a time.
         self._capture_queue.append(spec)
         self._pump_capture_queue()
 
@@ -1288,7 +1318,7 @@ class MagicDownloaderApp(tk.Tk):
         token = str(self.manager.settings.get("browser_token") or "")
 
         def on_add(data: dict) -> dict:
-            # IDM-style: pop the "Download File Info" dialog unless disabled.
+            #: pop the "Download File Info" dialog unless disabled.
             if self.manager.settings.get("confirm_browser_captures", True):
                 spec = self.manager.suggest_capture(data)
                 try:
@@ -1379,7 +1409,7 @@ class MagicDownloaderApp(tk.Tk):
             parent=self,
         )
 
-    # ── system tray (IDM-style: close hides, only Exit quits) ────────────
+    # ── system tray (: close hides, only Exit quits) ────────────
 
     def _load_brand_image(self, filename: str, height: int, fallbacks=()):
         """Load + scale a bundled brand image (RESOURCE_ROOT/<filename>) to the
@@ -1528,7 +1558,7 @@ class MagicDownloaderApp(tk.Tk):
             pass
 
     def _on_close(self) -> None:
-        # The window's X button: hide to tray (IDM-style) unless disabled.
+        # The window's X button: hide to tray unless disabled.
         if self._tray is not None and self.manager.settings.get("close_to_tray", True):
             self._hide_to_tray()
         else:

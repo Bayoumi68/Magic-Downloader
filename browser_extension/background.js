@@ -1,7 +1,7 @@
 /**
  * Magic Downloader — browser service worker (Chrome / Edge / Brave, MV3)
  *
- * IDM-style behaviour:
+ * Behaviour:
  *   1. Sniff network traffic for video/audio (HLS .m3u8, DASH .mpd, progressive
  *      .mp4/.webm/.mp3 …) and remember what each tab is playing.
  *   2. Expose that list to the on-page button and the popup so the user can
@@ -256,7 +256,7 @@ chrome.tabs.onRemoved.addListener((tabId) => {
 
 // A "page" item = "download whatever video this page is showing" via yt-dlp.
 // Reported by the content script when it sees a <video>, or inferred from the
-// hostname. This is the ONLY path that works on YouTube et al.
+// hostname. This is the ONLY path that works on such sites.
 function setPageItem(tabId, pageUrl, title) {
   if (tabId < 0 || !/^https?:/i.test(pageUrl || "")) return;
   let media = tabMedia.get(tabId);

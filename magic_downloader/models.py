@@ -70,7 +70,7 @@ class DownloadJob:
     cookie: str = ""
     extra_headers: dict[str, str] = field(default_factory=dict)
     source: str = "manual"  # manual | browser | clipboard
-    # Streaming media (IDM-style video grabber)
+    # Streaming media (video grabber)
     media_type: str = "http"  # http | hls | dash
     media_meta: dict[str, Any] = field(default_factory=dict)
 

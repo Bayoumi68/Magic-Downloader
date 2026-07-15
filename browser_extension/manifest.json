@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Magic Downloader",
-  "version": "0.5.10",
+  "version": "0.5.11",
   "description": "Fast download manager companion: grab videos (HLS/DASH/MP4) with a button right on the player, plus capture normal downloads.",
   "permissions": [
     "contextMenus",

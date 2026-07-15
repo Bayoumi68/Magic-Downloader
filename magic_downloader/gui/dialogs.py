@@ -1,4 +1,4 @@
-"""Add download and settings dialogs — polished IDM-style."""
+"""Add download and settings dialogs — polished ."""
 
 from __future__ import annotations
 
@@ -50,7 +50,7 @@ def _dedupe_name(folder: Path, name: str) -> str:
 
 
 def resolve_name_conflict(parent: tk.Misc, folder: Path, name: str) -> tuple[str, str]:
-    """IDM-style filename collision. If *name* already exists in *folder*, ask
+    """filename collision. If *name* already exists in *folder*, ask
     the user what to do instead of silently versioning.
 
     Returns ``(action, final_name)`` where action is one of:
@@ -79,7 +79,7 @@ def resolve_name_conflict(parent: tk.Misc, folder: Path, name: str) -> tuple[str
 
 
 def _confirm_create_folder(parent: tk.Misc, folder: str) -> bool:
-    """IDM-style: if the target folder doesn't exist, offer to create it.
+    """: if the target folder doesn't exist, offer to create it.
 
     Returns True if the folder exists (or was created), False to abort.
     """
@@ -241,7 +241,7 @@ class AddDownloadDialog(tk.Toplevel):
             self.path_var.get().strip() or str(resolve_save_path(self.settings, name).parent)
         )
         folder.mkdir(parents=True, exist_ok=True)
-        # IDM-style: if the name already exists, ask (overwrite / add version)
+        #: if the name already exists, ask (overwrite / add version)
         # instead of silently appending "(1)".
         action, name = resolve_name_conflict(self, folder, name)
         if action == "cancel":
@@ -495,7 +495,7 @@ def _human_size(n: int) -> str:
 
 
 class CaptureDialog(tk.Toplevel):
-    """IDM-style "Download File Info" dialog for browser-captured downloads.
+    """"Download File Info" dialog for browser-captured downloads.
 
     Prefilled from ``spec`` (manager.suggest_capture). Lets the user set the
     file name, category and save folder, then Start / queue (Later) / Cancel.
@@ -646,7 +646,7 @@ class CaptureDialog(tk.Toplevel):
         result = self._final()
         if not _confirm_create_folder(self, result["folder"]):
             return
-        # IDM-style filename collision prompt (overwrite / add version / cancel).
+        # filename collision prompt (overwrite / add version / cancel).
         action, newname = resolve_name_conflict(
             self, Path(result["folder"]), result["filename"]
         )
@@ -684,7 +684,7 @@ QUALITY_CHOICES = [
 
 
 class SettingsDialog(tk.Toplevel):
-    """Tabbed, IDM-style Options dialog."""
+    """Tabbed Options dialog."""
 
     def __init__(self, master: tk.Misc, settings: dict, on_save: Callable[[dict], None]) -> None:
         super().__init__(master)
@@ -1134,7 +1134,7 @@ class SettingsDialog(tk.Toplevel):
 
 
 class DownloadProgressDialog(tk.Toplevel):
-    """IDM-style per-download progress window (modeless — several can be open).
+    """per-download progress window (modeless — several can be open).
 
     Reads live state from the manager; the app drives ``update_view`` each tick.
     ``open_path(Path)`` opens a file/folder.
@@ -1150,7 +1150,9 @@ class DownloadProgressDialog(tk.Toplevel):
         self.configure(bg=T.BG)
         self.geometry("580x350")
         self.minsize(540, 330)
-        self.transient(master)
+        # NOT transient: a transient Toplevel gets no taskbar button and no
+        # minimize box on Windows. Keeping it independent lets each download
+        # window fold down to the taskbar and be restored from its icon.
 
         job = self.manager.get_job(job_id)
         header = tk.Frame(self, bg=T.BG_TOOLBAR, height=44)

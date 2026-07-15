@@ -1,6 +1,6 @@
-"""yt-dlp powered downloader for web-page videos (YouTube, Vimeo, ~1800 sites).
+"""yt-dlp powered downloader for web-page videos (~1800 sites).
 
-Why this exists: sites like YouTube don't expose a catchable HLS/DASH manifest —
+Why this exists: many sites don't expose a catchable HLS/DASH manifest —
 the media URLs are signature-ciphered and hidden in page JavaScript. yt-dlp is
 the standard, maintained extractor that solves this, enumerates *every* quality
 and format, and merges the chosen video+audio into one file via ffmpeg.
@@ -53,7 +53,7 @@ def _base_opts(
         headers["User-Agent"] = user_agent
     if referrer:
         headers["Referer"] = referrer
-    # NOTE: raw logged-in YouTube cookies push yt-dlp toward SABR/DRM/PO-token
+    # NOTE: raw logged-in cookies push yt-dlp toward SABR/DRM/PO-token
     # paths that fail with "Requested format is not available". Off by default;
     # public videos download fine anonymously.
     if cookie and use_cookies:
@@ -122,7 +122,7 @@ def probe_formats(url: str, cookie: str = "", user_agent: str = "", referrer: st
     best_audio = max(audio_fmts, key=lambda f: (f.get("abr") or 0), default=None)
     best_audio_size = _est_size(best_audio, duration) if best_audio else 0
 
-    # Show EVERY real format the site offers (like IDM), deduped only by
+    # Show EVERY real format the site offers , deduped only by
     # (resolution, container, progressive) so the list stays readable while
     # still surfacing mp4 AND webm, all resolutions, and every audio track.
     video_rows: dict[tuple, dict] = {}
@@ -331,7 +331,7 @@ class YtdlpEngine:
     def _download_attempts(self, has_ffmpeg: bool) -> list[tuple[str, dict | None]]:
         """(format_selector, extractor_args) tries, most-preferred first.
 
-        YouTube's `ios`/`web_safari`/`tv` clients frequently fail or serve DRM;
+        some sites' `ios`/`web_safari`/`tv` clients frequently fail or serve DRM;
         the default and `android` clients are the reliable ones, so we retry
         with progressively simpler formats + a known-good client set.
         """

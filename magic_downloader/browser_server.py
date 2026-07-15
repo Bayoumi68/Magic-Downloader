@@ -1,4 +1,4 @@
-"""Local HTTP API for browser extension integration (IDM-style capture).
+"""Local HTTP API for browser extension integration (browser capture).
 
 Binds only to 127.0.0.1. The Chrome/Edge extension posts download requests here.
 """

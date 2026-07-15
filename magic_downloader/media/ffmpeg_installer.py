@@ -1,7 +1,7 @@
 """Download a static ffmpeg build into the app's ``bin/`` folder.
 
 Matches the user's choice of a one-click ffmpeg helper. ffmpeg is what merges
-streamed / YouTube video+audio into a single clean MP4; without it the app can
+streamed video+audio into a single clean MP4; without it the app can
 only save raw ``.ts`` or separate files. This grabs a self-contained build so
 the user doesn't have to touch PATH.
 """

@@ -1,4 +1,4 @@
-"""Multi-segment HTTP download engine (IDM-style)."""
+"""Multi-segment HTTP download engine."""
 
 from __future__ import annotations
 
@@ -507,7 +507,7 @@ def resolve_download_name(
     """Ask the server (HEAD, falling back to GET) for the real filename + size.
 
     Returns (filename_or_empty, size). Used before showing the download dialog
-    so junk URLs (GUIDs) get their real name/extension, IDM-style.
+    so junk URLs (GUIDs) get their real name/extension.
     """
     headers: dict[str, str] = {}
     if user_agent:
