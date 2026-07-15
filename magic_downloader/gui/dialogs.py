@@ -1359,6 +1359,7 @@ class AboutDialog(tk.Toplevel):
         self.version = version
         self.on_quit = on_quit
         self._latest = None
+        self._ready = None      # installer already downloaded + verified
         self._busy = False
         self.title("About Magic Downloader")
         self.configure(bg=T.BG)
@@ -1469,6 +1470,11 @@ class AboutDialog(tk.Toplevel):
     def _do_update(self) -> None:
         if self._busy or not self._latest:
             return
+        # Already fetched and verified (the user said "not now" last time) —
+        # don't pull 28 MB down again.
+        if self._ready is not None and Path(self._ready).exists():
+            self._install(self._ready)
+            return
         self._set_busy(True)
         self.status.configure(text="Downloading the update…", fg=T.FG_MUTED)
         self.bar.pack(fill=tk.X, pady=(8, 0))
@@ -1504,9 +1510,34 @@ class AboutDialog(tk.Toplevel):
             self.bar.pack_forget()
             self.status.configure(text=f"Update failed: {err[:160]}", fg=T.RED)
             return
+        self.bar.pack_forget()
+        self._ready = path
+        self._install(path)
+
+    def _install(self, path) -> None:
+        """Ask, then hand off to the installer.
+
+        The installer force-closes Magic Downloader to replace its files, so
+        this prompt is the last moment the user can say no — going straight from
+        a download to a dead app is rude, however much they asked for the update.
+        """
+        ver = self._latest.version if self._latest else ""
+        self.status.configure(text="Download verified.", fg=T.GREEN)
+        if not messagebox.askyesno(
+            "Install update",
+            f"Version {ver} has been downloaded and verified.\n\n"
+            "Magic Downloader has to close while it installs, and any active "
+            "downloads will stop (you can resume them afterwards).\n\n"
+            "Install it now?",
+            parent=self,
+        ):
+            self.status.configure(
+                text=f"Version {ver} is downloaded and ready — click "
+                     "“Install now” whenever it suits you.", fg=T.FG_MUTED)
+            self.update_btn.configure(text="  Install now  ")
+            return
         self.status.configure(
-            text="Download verified. Starting the installer — "
-                 "Magic Downloader will close.", fg=T.GREEN)
+            text="Starting the installer — Magic Downloader will close.", fg=T.GREEN)
         from magic_downloader import updater
         try:
             updater.run_installer(path)

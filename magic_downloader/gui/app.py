@@ -1471,13 +1471,18 @@ class MagicDownloaderApp(tk.Tk):
             return
         from magic_downloader import updater
 
-        self._show_toast(f"Installing update {version} — Magic Downloader will restart.")
+        # Automatic mode was explicitly opted into, so this doesn't ask — but it
+        # shouldn't yank the window away mid-sentence either. Announce it, give
+        # the toast time to actually be read, then hand off.
+        self._show_toast(
+            f"Installing update {version} now — Magic Downloader will close and reopen."
+        )
         try:
             updater.run_installer(path)
         except Exception as exc:  # noqa: BLE001
             self._update_failed(str(exc))
             return
-        self.after(1200, self._quit)
+        self.after(5000, self._quit)
 
     # ── system tray (: close hides, only Exit quits) ────────────
 
