@@ -4,7 +4,7 @@
 ; Output:  installer\MagicDownloader-Setup-<version>.exe
 
 #define MyAppName "Magic Downloader"
-#define MyAppVersion "0.5.11"
+#define MyAppVersion "0.5.12"
 #define MyAppPublisher "Magic Downloader"
 #define MyAppExeName "MagicDownloader.exe"
 

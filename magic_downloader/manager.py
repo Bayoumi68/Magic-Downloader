@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import shutil
 import threading
 import time
 from pathlib import Path
@@ -668,12 +669,16 @@ class DownloadManager:
             if new.exists() or Path(str(new) + ".part").exists():
                 return False, f"A file named “{old.name}” already exists there."
             try:
+                # shutil.move (NOT Path.replace): replace is a rename and fails
+                # with "cannot move to a different disk drive" when the target
+                # folder is on another volume. shutil.move falls back to
+                # copy+delete across drives.
                 if old.exists():
-                    old.replace(new)
+                    shutil.move(str(old), str(new))
                 old_part = Path(str(old) + ".part")
                 if old_part.exists():
-                    old_part.replace(Path(str(new) + ".part"))
-            except OSError as exc:
+                    shutil.move(str(old_part), str(new) + ".part")
+            except (OSError, shutil.Error) as exc:
                 return False, str(exc)
             job.save_path = str(new)
             self._persist(force=True)
