@@ -8,7 +8,7 @@ A **fast, multi-connection** download manager for Windows, with a **real browser
 [![Downloads](https://img.shields.io/github/downloads/Bayoumi68/Magic-Downloader/total)](https://github.com/Bayoumi68/Magic-Downloader/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-## ⬇️ Download — latest version: **v0.5.14**
+## ⬇️ Download — latest version: **v0.5.15**
 
 **[Get the latest release →](https://github.com/Bayoumi68/Magic-Downloader/releases/latest)**
 

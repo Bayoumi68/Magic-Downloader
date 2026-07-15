@@ -165,8 +165,6 @@ class MagicDownloaderApp(tk.Tk):
         menubar.add_cascade(label="Downloads", menu=downloads)
 
         help_m = tk.Menu(menubar, tearoff=0)
-        help_m.add_command(label="Check for updates…", command=self._check_updates)
-        help_m.add_separator()
         help_m.add_command(label="About Magic Downloader", command=self._about)
         menubar.add_cascade(label="Help", menu=help_m)
         self.config(menu=menubar)
@@ -1396,19 +1394,15 @@ class MagicDownloaderApp(tk.Tk):
             self._browser = None
         self._start_browser_server()
 
-    def _about(self, auto_check: bool = False) -> None:
+    def _about(self) -> None:
+        """About box — shows the version and has the update check/install."""
         from magic_downloader import __version__
 
         AboutDialog(
             self, __version__,
             logo=getattr(self, "_brand_emblem", None),
             on_quit=self._quit,
-            auto_check=auto_check,
         )
-
-    def _check_updates(self) -> None:
-        """Help → Check for updates: open About and check straight away."""
-        self._about(auto_check=True)
 
     UPDATE_POLL_MS = 60 * 60 * 1000   # re-check every 60 minutes
 
