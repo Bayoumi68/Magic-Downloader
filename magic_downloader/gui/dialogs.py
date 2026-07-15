@@ -789,6 +789,33 @@ class SettingsDialog(tk.Toplevel):
         if not _startup.is_supported():
             startup_cb.configure(state="disabled")
 
+        # ── updates ──
+        self.check_updates = tk.BooleanVar(
+            value=bool(self.settings.get(
+                "check_updates", self.settings.get("check_updates_on_start", True)))
+        )
+        ttk.Checkbutton(
+            f, text="Check for updates (at startup and every 60 minutes)",
+            variable=self.check_updates, command=self._sync_update_boxes,
+        ).grid(row=7, column=0, columnspan=3, sticky="w", pady=(10, 2))
+
+        self.auto_install_updates = tk.BooleanVar(
+            value=bool(self.settings.get("auto_install_updates", False))
+        )
+        self.auto_upd_cb = ttk.Checkbutton(
+            f, text="Install updates automatically (waits until downloads finish)",
+            variable=self.auto_install_updates,
+        )
+        self.auto_upd_cb.grid(row=8, column=0, columnspan=3, sticky="w", padx=(22, 0), pady=2)
+        self._sync_update_boxes()
+
+    def _sync_update_boxes(self) -> None:
+        """Automatic updates only make sense while update checks are enabled."""
+        on = bool(self.check_updates.get())
+        self.auto_upd_cb.configure(state="normal" if on else "disabled")
+        if not on:
+            self.auto_install_updates.set(False)
+
     # ── Tab: Connections / speed ────────────────────────────────────────
     def _build_connections(self, nb: ttk.Notebook) -> None:
         f = self._tab(nb, "Connections")
@@ -1081,6 +1108,8 @@ class SettingsDialog(tk.Toplevel):
         self.settings["close_to_tray"] = bool(self.close_to_tray.get())
         self.settings["minimize_to_tray"] = bool(self.minimize_to_tray.get())
         self.settings["show_progress_dialog"] = bool(self.show_progress.get())
+        self.settings["check_updates"] = bool(self.check_updates.get())
+        self.settings["auto_install_updates"] = bool(self.auto_install_updates.get())
         try:
             from magic_downloader import startup as _startup
 

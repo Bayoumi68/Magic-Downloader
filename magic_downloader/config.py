@@ -35,8 +35,13 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "default_video_quality": "best",  # best | ask | 2160 | 1440 | 1080 | 720 | 480 | 360 | audio
     # UX
     "confirm_delete": True,
-    # Quietly look for a newer release once at startup (a toast, never a popup).
-    "check_updates_on_start": True,
+    # Look for a newer release at startup and every 60 minutes (a toast, never
+    # a popup). Turn off in Options → General.
+    "check_updates": True,
+    # Download + install a newer release without asking. Only honoured when
+    # check_updates is on, and it always waits until no download is running so
+    # the installer (which closes the app) can't interrupt a transfer.
+    "auto_install_updates": False,
     # Keep running in the system tray when the window is closed;
     # only "Exit" actually quits.
     "close_to_tray": True,

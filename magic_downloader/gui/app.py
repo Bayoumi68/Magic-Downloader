@@ -79,6 +79,7 @@ class MagicDownloaderApp(tk.Tk):
         self._capture_queue: list[dict] = []
         self._capture_active = False
         self._progress_dialogs: dict[str, DownloadProgressDialog] = {}
+        self._update_pending = False   # an auto-update is downloading/awaiting idle
 
         self._build_menu()
         self._build_toolbar()
@@ -100,7 +101,7 @@ class MagicDownloaderApp(tk.Tk):
 
         self._refresh_all()
         self.after(400, self._tick)
-        self.after(2500, self._startup_update_check)
+        self.after(2500, self._update_poll)
 
     # ── chrome ──────────────────────────────────────────────────────────
 
@@ -1409,10 +1410,18 @@ class MagicDownloaderApp(tk.Tk):
         """Help → Check for updates: open About and check straight away."""
         self._about(auto_check=True)
 
-    def _startup_update_check(self) -> None:
-        """Quietly look for a newer version once at startup; on success show a
-        toast. Never interrupts and never complains if offline."""
-        if not self.manager.settings.get("check_updates_on_start", True):
+    UPDATE_POLL_MS = 60 * 60 * 1000   # re-check every 60 minutes
+
+    def _updates_enabled(self) -> bool:
+        s = self.manager.settings
+        return bool(s.get("check_updates", s.get("check_updates_on_start", True)))
+
+    def _update_poll(self) -> None:
+        """Quietly look for a newer version — at startup, then hourly. Shows a
+        toast (or auto-installs when enabled). Silent when offline/disabled.
+        Always reschedules, so toggling the setting takes effect immediately."""
+        self.after(self.UPDATE_POLL_MS, self._update_poll)
+        if not self._updates_enabled() or self._update_pending:
             return
 
         def work() -> None:
@@ -1420,13 +1429,61 @@ class MagicDownloaderApp(tk.Tk):
             try:
                 rel = updater.check_latest(timeout=10)
                 if updater.is_newer(rel.version, __version__):
-                    self.after(0, lambda: self._show_toast(
-                        f"Update available: version {rel.version} — "
-                        f"Help → About to install it."))
+                    self.after(0, lambda: self._on_update_found(rel))
             except Exception:  # noqa: BLE001 — offline / rate-limited: stay quiet
                 pass
 
         threading.Thread(target=work, daemon=True).start()
+
+    def _on_update_found(self, rel) -> None:
+        if self._update_pending:
+            return
+        if not self.manager.settings.get("auto_install_updates", False):
+            self._show_toast(
+                f"Update available: version {rel.version} — Help → About to install it."
+            )
+            return
+        # Automatic: fetch it now, install once nothing is downloading.
+        self._update_pending = True
+        self._show_toast(f"Downloading update {rel.version} in the background…")
+
+        def work() -> None:
+            from magic_downloader import updater
+            try:
+                path = updater.download_installer(timeout=30)
+                self.after(0, lambda: self._install_when_idle(path, rel.version))
+            except Exception as exc:  # noqa: BLE001
+                self.after(0, lambda e=exc: self._update_failed(str(e)))
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def _update_failed(self, err: str) -> None:
+        self._update_pending = False
+        self._show_toast(f"Automatic update failed: {err[:90]}")
+
+    def _install_when_idle(self, path, version: str, announced: bool = False) -> None:
+        """Never interrupt a transfer: hold the verified installer until the
+        queue is idle, then hand off and quit."""
+        from magic_downloader.manager import BUSY_STATUSES
+
+        busy = [j for j in self.manager.jobs if j.status in BUSY_STATUSES]
+        if busy:
+            if not announced:
+                self._show_toast(
+                    f"Update {version} is ready — it will install when your "
+                    f"{len(busy)} active download(s) finish."
+                )
+            self.after(15000, lambda: self._install_when_idle(path, version, True))
+            return
+        from magic_downloader import updater
+
+        self._show_toast(f"Installing update {version} — Magic Downloader will restart.")
+        try:
+            updater.run_installer(path)
+        except Exception as exc:  # noqa: BLE001
+            self._update_failed(str(exc))
+            return
+        self.after(1200, self._quit)
 
     # ── system tray (: close hides, only Exit quits) ────────────
 

@@ -8,7 +8,7 @@ A **fast, multi-connection** download manager for Windows, with a **real browser
 [![Downloads](https://img.shields.io/github/downloads/Bayoumi68/Magic-Downloader/total)](https://github.com/Bayoumi68/Magic-Downloader/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-## ⬇️ Download — latest version: **v0.5.13**
+## ⬇️ Download — latest version: **v0.5.14**
 
 **[Get the latest release →](https://github.com/Bayoumi68/Magic-Downloader/releases/latest)**
 
@@ -41,7 +41,7 @@ _These links always point to the newest version (the filenames never change):_
 | **Browser integration** | Chrome/Edge/Brave extension: network media sniffing, right-click links, capture browser downloads |
 | **History** | Completed downloads listed; open file / folder |
 | **Settings** | Connections per download, max simultaneous downloads, default save path |
-| **In-app updates** | **Help → About** (or **Check for updates**) shows your version, checks for a newer release, and installs it for you — the download is verified against its published SHA-256 first. A quiet check at startup tells you when one is available |
+| **In-app updates** | **Help → About** (or **Check for updates**) shows your version, checks for a newer release, and installs it for you — the download is verified against its published SHA-256 first. **Options → General:** check for updates at startup + every 60 min, and optionally **install them automatically** (it waits until no download is running, so it never interrupts a transfer) |
 
 ### How the video grabber works
 
