@@ -62,6 +62,11 @@ class DownloadJob:
     started_at: float | None = None
     finished_at: float | None = None
     speed_bps: float = 0.0
+    # Seconds this job actually spent transferring, summed across every run.
+    # NOT the same as finished_at - started_at: started_at is stamped once and
+    # never reset, so wall-clock elapsed counts pauses, stalls and overnight
+    # gaps as download time and makes a resumed job look glacially slow.
+    active_seconds: float = 0.0
     segments: list[SegmentState] = field(default_factory=list)
     etag: str = ""
     last_modified: str = ""
@@ -74,9 +79,45 @@ class DownloadJob:
     media_type: str = "http"  # http | hls | dash
     media_meta: dict[str, Any] = field(default_factory=dict)
 
+    # A burst of bytes further apart than this means the transfer wasn't running
+    # (paused, stalled, waiting on a server, or the app was restarted), so the
+    # gap isn't counted as download time.
+    ACTIVE_GAP_MAX = 5.0
+
+    def __post_init__(self) -> None:
+        # Per-run marker for tick_active(); deliberately not a field, so it's
+        # never persisted or copied.
+        self._tick: float | None = None
+
+    def tick_active(self) -> None:
+        """Call whenever bytes arrive: accumulates real transferring time.
+
+        Several connections deliver bytes at once, so this measures the gap
+        since the previous burst from *any* connection — which approximates
+        wall-clock time spent transferring, not the sum over connections.
+        """
+        now = time.monotonic()
+        last, self._tick = self._tick, now
+        if last is not None:
+            gap = now - last
+            if 0.0 < gap <= self.ACTIVE_GAP_MAX:
+                self.active_seconds += gap
+
     @property
     def is_stream(self) -> bool:
         return self.media_type in ("hls", "dash")
+
+    @property
+    def avg_speed_bps(self) -> float:
+        """Average throughput over the time actually spent transferring.
+
+        0.0 (rendered "—") only when there is genuinely no timing to report:
+        a job that never ran, or one downloaded by a version before this was
+        tracked. Any real transfer records time, however brief.
+        """
+        if self.active_seconds <= 0.0 or self.downloaded <= 0:
+            return 0.0
+        return self.downloaded / self.active_seconds
 
     @property
     def progress(self) -> float:
@@ -126,6 +167,7 @@ class DownloadJob:
             "created_at": self.created_at,
             "started_at": self.started_at,
             "finished_at": self.finished_at,
+            "active_seconds": self.active_seconds,
             "etag": self.etag,
             "last_modified": self.last_modified,
             "referrer": self.referrer,
@@ -173,6 +215,7 @@ class DownloadJob:
             created_at=float(data.get("created_at") or time.time()),
             started_at=data.get("started_at"),
             finished_at=data.get("finished_at"),
+            active_seconds=float(data.get("active_seconds") or 0.0),
             etag=data.get("etag") or "",
             last_modified=data.get("last_modified") or "",
             referrer=data.get("referrer") or "",

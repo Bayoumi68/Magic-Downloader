@@ -8,7 +8,7 @@ A **fast, multi-connection** download manager for Windows, with a **real browser
 [![Downloads](https://img.shields.io/github/downloads/Bayoumi68/Magic-Downloader/total)](https://github.com/Bayoumi68/Magic-Downloader/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-## ⬇️ Download — latest version: **v0.5.16**
+## ⬇️ Download — latest version: **v0.5.17**
 
 **[Get the latest release →](https://github.com/Bayoumi68/Magic-Downloader/releases/latest)**
 
@@ -36,7 +36,7 @@ _These links always point to the newest version (the filenames never change):_
 | **Multi-connection downloads** | Split files (and stream segments) into parallel connections for higher speed |
 | **Pause / Resume** | Stop and continue downloads; partial files and stream segments are kept |
 | **Queue** | Multiple downloads managed together |
-| **Progress UI** | Filename, size, status, progress, speed, ETA, connections, segment map |
+| **Progress UI** | Filename, folder, size, status, progress, speed, **average speed**, **elapsed**, time left, **date**, connections, category — plus the segment map. **Right-click the list header** to show/hide any column; your choice is remembered. Average speed and elapsed are measured over the time actually spent transferring, so a paused download doesn't report a misleading figure, and both stay on screen after the download finishes |
 | **Categories** | Save to folders by type (General, Compressed, Documents, Music, Video) |
 | **Browser integration** | Chrome/Edge/Brave extension: network media sniffing, right-click links, capture browser downloads |
 | **History** | Completed downloads listed; open file / folder |

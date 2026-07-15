@@ -6,6 +6,7 @@ import os
 import subprocess
 import sys
 import threading
+import time
 import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, ttk
@@ -34,7 +35,10 @@ from magic_downloader.models import (
     format_speed,
 )
 
-COLUMNS = ("filename", "folder", "size", "status", "progress", "speed", "eta", "conn", "category")
+COLUMNS = ("filename", "folder", "size", "status", "progress", "speed", "avg",
+           "elapsed", "eta", "date", "conn", "category")
+# The list would be unusable with nothing in it, so this one always stays.
+ALWAYS_SHOWN = "filename"
 
 # Sidebar filter keys
 FILTER_ALL = "all"
@@ -309,26 +313,35 @@ class MagicDownloaderApp(tk.Tk):
             show="headings",
             selectmode="extended",
         )
-        headings = {
-            "filename": ("File name", 240),
-            "folder": ("Folder", 240),
-            "size": ("Size", 130),
-            "status": ("Status", 120),
+        self._headings = {
+            "filename": ("File name", 200),
+            "folder": ("Folder", 210),
+            "size": ("Size", 120),
+            "status": ("Status", 100),
             "progress": ("Progress", 90),
             "speed": ("Speed", 100),
+            "avg": ("Avg speed", 100),
+            "elapsed": ("Elapsed", 80),
             "eta": ("Time left", 90),
+            "date": ("Date", 120),
             "conn": ("Parts", 55),
             "category": ("Category", 100),
         }
-        for key, (label, width) in headings.items():
+        for key, (label, width) in self._headings.items():
             self.tree.heading(key, text=label, command=lambda k=key: self._sort_by(k))
             stretch = key == "filename"
             self.tree.column(key, width=width, minwidth=40, stretch=stretch, anchor="w")
 
+        # All the columns together are wider than the window, so the list needs
+        # to scroll sideways — otherwise the last ones are simply unreachable.
+        # The h-scrollbar must be packed first to reserve the bottom strip.
         yscroll = ttk.Scrollbar(list_wrap, orient=tk.VERTICAL, command=self.tree.yview)
-        self.tree.configure(yscrollcommand=yscroll.set)
+        xscroll = ttk.Scrollbar(list_wrap, orient=tk.HORIZONTAL, command=self.tree.xview)
+        self.tree.configure(yscrollcommand=yscroll.set, xscrollcommand=xscroll.set)
+        xscroll.pack(side=tk.BOTTOM, fill=tk.X)
         self.tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         yscroll.pack(side=tk.RIGHT, fill=tk.Y)
+        self._apply_visible_columns(self._load_visible_columns())
 
         # Row tags for status colors
         self.tree.tag_configure("Downloading", foreground=T.GREEN)
@@ -715,6 +728,17 @@ class MagicDownloaderApp(tk.Tk):
             if job.status == DownloadStatus.DOWNLOADING
             else "—"
         )
+        # Unlike Speed, this stays put once the download stops — it's the whole
+        # point of the column. Jobs from before active_seconds was tracked have
+        # nothing to average, so they read "—".
+        avg = format_speed(job.avg_speed_bps)
+        # Time spent actually downloading, so a job paused overnight doesn't
+        # claim a 9-hour "elapsed".
+        elapsed = format_eta(job.active_seconds) if job.active_seconds > 0 else "—"
+        # When it finished, falling back to when it was added for anything that
+        # hasn't finished. Sorts correctly as text, which is how the grid sorts.
+        stamp = job.finished_at or job.created_at
+        date = time.strftime("%Y-%m-%d %H:%M", time.localtime(stamp)) if stamp else "—"
         eta = (
             format_eta(job.eta_seconds)
             if job.status == DownloadStatus.DOWNLOADING
@@ -728,7 +752,8 @@ class MagicDownloaderApp(tk.Tk):
             folder = str(Path(job.save_path).parent)
         except Exception:
             folder = ""
-        return (job.filename, folder, size, status, progress, speed, eta, conn, job.category)
+        return (job.filename, folder, size, status, progress, speed, avg, elapsed,
+                eta, date, conn, job.category)
 
     def _update_detail(self) -> None:
         ids = self._selected_ids()
@@ -840,7 +865,61 @@ class MagicDownloaderApp(tk.Tk):
         for i, iid in enumerate(items):
             self.tree.move(iid, "", i)
 
+    # ── column visibility ───────────────────────────────────────
+
+    def _load_visible_columns(self) -> list[str]:
+        """Saved choice, filtered to columns that still exist.
+
+        Empty/absent means "show everything" — so columns added by a later
+        version appear for anyone who never customised the list.
+        """
+        saved = [c for c in (self.manager.settings.get("visible_columns") or [])
+                 if c in COLUMNS]
+        return saved or list(COLUMNS)
+
+    def _apply_visible_columns(self, visible: list[str]) -> None:
+        # Keep the grid's own order regardless of what order they were saved in.
+        cols = [c for c in COLUMNS if c in visible]
+        if ALWAYS_SHOWN not in cols:
+            cols.insert(0, ALWAYS_SHOWN)
+        self._visible_cols = cols
+        self.tree.configure(displaycolumns=cols)
+        self._col_vars = {c: tk.BooleanVar(value=c in cols) for c in COLUMNS}
+
+    def _toggle_column(self, key: str) -> None:
+        visible = [c for c in COLUMNS if self._col_vars[c].get()]
+        if not visible:                      # unticked the last one — undo it
+            self._col_vars[key].set(True)
+            return
+        self._apply_visible_columns(visible)
+        self.manager.settings["visible_columns"] = self._visible_cols
+        self.manager.save_settings()
+
+    def _show_all_columns(self) -> None:
+        self._apply_visible_columns(list(COLUMNS))
+        self.manager.settings["visible_columns"] = list(COLUMNS)
+        self.manager.save_settings()
+
+    def _columns_menu(self, event: tk.Event) -> None:
+        m = tk.Menu(self, tearoff=0)
+        for key in COLUMNS:
+            label = self._headings[key][0]
+            if key == ALWAYS_SHOWN:
+                m.add_checkbutton(label=label, variable=self._col_vars[key],
+                                  state="disabled")
+                continue
+            m.add_checkbutton(label=label, variable=self._col_vars[key],
+                              command=lambda k=key: self._toggle_column(k))
+        m.add_separator()
+        m.add_command(label="Show all columns", command=self._show_all_columns)
+        m.tk_popup(event.x_root, event.y_root)
+
     def _context_menu(self, event: tk.Event) -> None:
+        # Right-clicking the header picks columns; right-clicking a row acts on
+        # the download.
+        if self.tree.identify_region(event.x, event.y) in ("heading", "separator"):
+            self._columns_menu(event)
+            return
         row = self.tree.identify_row(event.y)
         if row:
             if row not in self.tree.selection():

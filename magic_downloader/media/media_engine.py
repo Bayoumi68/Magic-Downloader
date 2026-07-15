@@ -126,6 +126,7 @@ class MediaDownloadEngine:
     def _update_speed(self, n_bytes: int) -> None:
         now = time.monotonic()
         with self._lock:
+            self.job.tick_active()
             self._speed_window.append((now, n_bytes))
             cutoff = now - 3.0
             self._speed_window = [(t, b) for t, b in self._speed_window if t >= cutoff]
@@ -158,6 +159,7 @@ class MediaDownloadEngine:
             self.job.status = DownloadStatus.DOWNLOADING
             if self.job.started_at is None:
                 self.job.started_at = time.time()
+            self.job.tick_active()   # start the Avg-speed clock (see engine.run)
             self._emit()
 
             tmp_dir = self._tmp_dir()

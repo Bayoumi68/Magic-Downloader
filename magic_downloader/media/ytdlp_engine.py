@@ -316,6 +316,7 @@ class YtdlpEngine:
                 self.job.total_size = int(total)
             self.job.downloaded = int(done)
             self.job.speed_bps = float(d.get("speed") or 0.0)
+            self.job.tick_active()
             frag = d.get("fragment_index")
             frag_total = d.get("fragment_count")
             if frag and frag_total:

@@ -35,6 +35,10 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "default_video_quality": "best",  # best | ask | 2160 | 1440 | 1080 | 720 | 480 | 360 | audio
     # UX
     "confirm_delete": True,
+    # Download-list columns to show (right-click the list header to choose).
+    # Empty means every column, so ones added by a later version show up for
+    # anyone who hasn't picked their own set.
+    "visible_columns": [],
     # Look for a newer release at startup and every 60 minutes (a toast, never
     # a popup). Turn off in Options → General.
     "check_updates": True,

@@ -100,6 +100,7 @@ class DownloadEngine:
     def _update_speed(self, n_bytes: int) -> None:
         now = time.monotonic()
         with self._lock:
+            self.job.tick_active()
             self._speed_window.append((now, n_bytes))
             # Keep ~3 seconds of samples
             cutoff = now - 3.0
@@ -183,6 +184,11 @@ class DownloadEngine:
             self.job.status = DownloadStatus.DOWNLOADING
             if self.job.started_at is None:
                 self.job.started_at = time.time()
+            # Start the Avg-speed clock here, so the wait for the first bytes
+            # counts as download time. Without this the first chunk has nothing
+            # to measure against, and a file that arrives in one chunk would
+            # record no time at all.
+            self.job.tick_active()
             self._emit()
 
             Path(self.job.save_path).parent.mkdir(parents=True, exist_ok=True)
