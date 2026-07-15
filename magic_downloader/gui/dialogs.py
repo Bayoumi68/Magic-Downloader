@@ -16,7 +16,7 @@ from magic_downloader.config import category_for_filename, resolve_save_path
 from magic_downloader.engine import suggest_filename
 from magic_downloader.gui import theme as T
 from magic_downloader.media import ffmpeg as ffmpeg_mod
-from magic_downloader.gui.widgets import ProgressBar, SegmentBar
+from magic_downloader.gui.widgets import ProgressBar, SegmentBar  # noqa: F401
 from magic_downloader.media.detect import MediaKind, classify_url
 from magic_downloader.models import (
     DownloadJob,
@@ -1314,3 +1314,175 @@ class DownloadProgressDialog(tk.Toplevel):
             self.destroy()
         except tk.TclError:
             pass
+
+
+class AboutDialog(tk.Toplevel):
+    """About box with the running version, an update check, and in-app update.
+
+    ``on_quit()`` is called after the installer is launched so the app can close
+    and let it replace the files.
+    """
+
+    def __init__(self, master: tk.Misc, version: str, logo=None,
+                 on_quit: Callable[[], None] | None = None,
+                 auto_check: bool = False) -> None:
+        super().__init__(master)
+        self.version = version
+        self.on_quit = on_quit
+        self._latest = None
+        self._busy = False
+        self.title("About Magic Downloader")
+        self.configure(bg=T.BG)
+        self.resizable(False, False)
+        self.transient(master)
+
+        head = tk.Frame(self, bg=T.BG_TOOLBAR)
+        head.pack(fill=tk.X)
+        inner = tk.Frame(head, bg=T.BG_TOOLBAR)
+        inner.pack(padx=16, pady=12)
+        if logo is not None:
+            tk.Label(inner, image=logo, bg=T.BG_TOOLBAR).pack(side=tk.LEFT, padx=(0, 12))
+        txt = tk.Frame(inner, bg=T.BG_TOOLBAR)
+        txt.pack(side=tk.LEFT)
+        tk.Label(txt, text="Magic Downloader", bg=T.BG_TOOLBAR, fg=T.FG_ON_DARK,
+                 font=("Segoe UI", 15, "bold"), anchor="w").pack(anchor="w")
+        tk.Label(txt, text=f"Version {version}", bg=T.BG_TOOLBAR, fg="#cfe0f5",
+                 font=T.FONT_UI, anchor="w").pack(anchor="w")
+
+        body = tk.Frame(self, bg=T.BG, padx=18, pady=14)
+        body.pack(fill=tk.BOTH, expand=True)
+        tk.Label(
+            body,
+            text=("A fast, multi-connection download manager:\n"
+                  "• Segmented multi-part downloads · pause / resume\n"
+                  "• Queue, categories, progress map, speed limit\n"
+                  "• Video grabber: HLS/DASH streams + ~1800 sites\n"
+                  "• Browser extension: download button + video panel\n\n"
+                  "Please only download content you have the right to."),
+            bg=T.BG, fg=T.FG, font=T.FONT_UI, justify=tk.LEFT, anchor="w",
+        ).pack(fill=tk.X)
+
+        # ── update area ──
+        upd = tk.Frame(body, bg=T.BG)
+        upd.pack(fill=tk.X, pady=(12, 0))
+        tk.Frame(upd, bg=T.BORDER, height=1).pack(fill=tk.X, pady=(0, 10))
+        self.status = tk.Label(upd, text=f"You're running version {version}.",
+                               bg=T.BG, fg=T.FG_MUTED, font=T.FONT_SMALL,
+                               anchor="w", justify=tk.LEFT, wraplength=420)
+        self.status.pack(fill=tk.X)
+        self.bar = ProgressBar(upd, height=16)
+        self.notes = tk.Label(upd, text="", bg=T.BG, fg=T.FG_MUTED,
+                              font=("Segoe UI", 8), anchor="w", justify=tk.LEFT,
+                              wraplength=420)
+
+        btns = tk.Frame(self, bg=T.BG, padx=14, pady=12)
+        btns.pack(fill=tk.X)
+        ttk.Button(btns, text="Close", command=self.destroy).pack(side=tk.RIGHT, padx=4)
+        self.update_btn = ttk.Button(btns, text="  Update now  ", command=self._do_update)
+        self.check_btn = ttk.Button(btns, text="Check for updates", command=self._do_check)
+        self.check_btn.pack(side=tk.RIGHT, padx=4)
+
+        _center(self)
+        self.grab_set()
+        if auto_check:
+            self.after(200, self._do_check)
+
+    # ── update check ──
+    def _set_busy(self, busy: bool) -> None:
+        self._busy = busy
+        state = "disabled" if busy else "normal"
+        try:
+            self.check_btn.configure(state=state)
+            self.update_btn.configure(state=state)
+        except tk.TclError:
+            pass
+
+    def _do_check(self) -> None:
+        if self._busy:
+            return
+        self._set_busy(True)
+        self.status.configure(text="Checking for updates…", fg=T.FG_MUTED)
+        self.notes.pack_forget()
+
+        def work() -> None:
+            from magic_downloader import updater
+            try:
+                rel = updater.check_latest()
+                newer = updater.is_newer(rel.version, self.version)
+                self.after(0, lambda: self._checked(rel, newer, ""))
+            except Exception as exc:  # noqa: BLE001
+                self.after(0, lambda e=exc: self._checked(None, False, str(e)))
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def _checked(self, rel, newer: bool, err: str) -> None:
+        self._set_busy(False)
+        if err:
+            self.status.configure(text=f"Couldn't check for updates: {err[:120]}", fg=T.RED)
+            return
+        self._latest = rel
+        if newer:
+            self.status.configure(
+                text=f"Update available: version {rel.version} "
+                     f"(you have {self.version}).", fg=T.GREEN)
+            if rel.notes:
+                first = "\n".join(rel.notes.splitlines()[:6])
+                self.notes.configure(text=first)
+                self.notes.pack(fill=tk.X, pady=(6, 0))
+            self.update_btn.pack(side=tk.RIGHT, padx=4)
+        else:
+            self.status.configure(
+                text=f"You're up to date — version {self.version} is the latest.",
+                fg=T.GREEN)
+            self.update_btn.pack_forget()
+
+    # ── in-app update ──
+    def _do_update(self) -> None:
+        if self._busy or not self._latest:
+            return
+        self._set_busy(True)
+        self.status.configure(text="Downloading the update…", fg=T.FG_MUTED)
+        self.bar.pack(fill=tk.X, pady=(8, 0))
+        self.bar.set_progress(0, active=True)
+
+        def on_progress(done: int, total: int) -> None:
+            pct = (done / total * 100.0) if total else 0.0
+            self.after(0, lambda: self._progress(pct, done, total))
+
+        def work() -> None:
+            from magic_downloader import updater
+            try:
+                path = updater.download_installer(progress=on_progress)
+                self.after(0, lambda: self._downloaded(path, ""))
+            except Exception as exc:  # noqa: BLE001
+                self.after(0, lambda e=exc: self._downloaded(None, str(e)))
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def _progress(self, pct: float, done: int, total: int) -> None:
+        try:
+            self.bar.set_progress(pct, active=True)
+            self.status.configure(
+                text=f"Downloading the update…  {format_bytes(done)}"
+                     + (f" / {format_bytes(total)}" if total else ""),
+                fg=T.FG_MUTED)
+        except tk.TclError:
+            pass
+
+    def _downloaded(self, path, err: str) -> None:
+        self._set_busy(False)
+        if err:
+            self.bar.pack_forget()
+            self.status.configure(text=f"Update failed: {err[:160]}", fg=T.RED)
+            return
+        self.status.configure(
+            text="Download verified. Starting the installer — "
+                 "Magic Downloader will close.", fg=T.GREEN)
+        from magic_downloader import updater
+        try:
+            updater.run_installer(path)
+        except Exception as exc:  # noqa: BLE001
+            self.status.configure(text=f"Couldn't start the installer: {exc}", fg=T.RED)
+            return
+        if self.on_quit:
+            self.after(900, self.on_quit)

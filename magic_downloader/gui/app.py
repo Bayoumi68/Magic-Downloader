@@ -17,6 +17,7 @@ from magic_downloader.browser_server import BrowserAPIServer
 from magic_downloader.config import ROOT
 from magic_downloader.gui import theme as T
 from magic_downloader.gui.dialogs import (
+    AboutDialog,
     AddDownloadDialog,
     AddVideoDialog,
     CaptureDialog,
@@ -99,6 +100,7 @@ class MagicDownloaderApp(tk.Tk):
 
         self._refresh_all()
         self.after(400, self._tick)
+        self.after(2500, self._startup_update_check)
 
     # ── chrome ──────────────────────────────────────────────────────────
 
@@ -162,6 +164,8 @@ class MagicDownloaderApp(tk.Tk):
         menubar.add_cascade(label="Downloads", menu=downloads)
 
         help_m = tk.Menu(menubar, tearoff=0)
+        help_m.add_command(label="Check for updates…", command=self._check_updates)
+        help_m.add_separator()
         help_m.add_command(label="About Magic Downloader", command=self._about)
         menubar.add_cascade(label="Help", menu=help_m)
         self.config(menu=menubar)
@@ -1391,23 +1395,38 @@ class MagicDownloaderApp(tk.Tk):
             self._browser = None
         self._start_browser_server()
 
-    def _about(self) -> None:
+    def _about(self, auto_check: bool = False) -> None:
         from magic_downloader import __version__
 
-        messagebox.showinfo(
-            "About Magic Downloader",
-            f"Magic Downloader {__version__}\n\n"
-            "A fast, multi-connection download manager:\n"
-            "• Segmented multi-part downloads\n"
-            "• Pause / resume with partial files\n"
-            "• Queue, categories, progress map, speed limit\n"
-            "• Video grabber: streaming (HLS/DASH) + many websites\n"
-            "• All qualities & formats · merged to MP4 with ffmpeg\n"
-            "• Browser extension: download button + video panel\n\n"
-            "Install ffmpeg from Options → Video for clean merged MP4.\n\n"
-            "Please only download content you have the right to.",
-            parent=self,
+        AboutDialog(
+            self, __version__,
+            logo=getattr(self, "_brand_emblem", None),
+            on_quit=self._quit,
+            auto_check=auto_check,
         )
+
+    def _check_updates(self) -> None:
+        """Help → Check for updates: open About and check straight away."""
+        self._about(auto_check=True)
+
+    def _startup_update_check(self) -> None:
+        """Quietly look for a newer version once at startup; on success show a
+        toast. Never interrupts and never complains if offline."""
+        if not self.manager.settings.get("check_updates_on_start", True):
+            return
+
+        def work() -> None:
+            from magic_downloader import __version__, updater
+            try:
+                rel = updater.check_latest(timeout=10)
+                if updater.is_newer(rel.version, __version__):
+                    self.after(0, lambda: self._show_toast(
+                        f"Update available: version {rel.version} — "
+                        f"Help → About to install it."))
+            except Exception:  # noqa: BLE001 — offline / rate-limited: stay quiet
+                pass
+
+        threading.Thread(target=work, daemon=True).start()
 
     # ── system tray (: close hides, only Exit quits) ────────────
 

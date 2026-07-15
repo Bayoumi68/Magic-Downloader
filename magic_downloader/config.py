@@ -35,6 +35,8 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "default_video_quality": "best",  # best | ask | 2160 | 1440 | 1080 | 720 | 480 | 360 | audio
     # UX
     "confirm_delete": True,
+    # Quietly look for a newer release once at startup (a toast, never a popup).
+    "check_updates_on_start": True,
     # Keep running in the system tray when the window is closed;
     # only "Exit" actually quits.
     "close_to_tray": True,
