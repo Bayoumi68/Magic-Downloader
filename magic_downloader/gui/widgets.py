@@ -36,7 +36,7 @@ class ProgressBar(tk.Canvas):
         color = T.GREEN if getattr(self, "_active", False) else T.GREEN_SEG_DONE
         if self._value >= 100:
             color = T.GREEN_SEG_DONE
-        self.create_rectangle(0, 0, w, h, fill="#e9edf2", outline="")
+        self.create_rectangle(0, 0, w, h, fill=T.BORDER, outline="")
         if fill > 0:
             self.create_rectangle(0, 0, fill, h, fill=color, outline="")
         label = f"{self._value:.1f}%"

@@ -126,7 +126,7 @@ class MagicDownloaderApp(tk.Tk):
             pass
         style.configure(
             "Treeview",
-            rowheight=28,
+            rowheight=32,
             font=T.FONT_UI,
             background=T.BG_LIST,
             fieldbackground=T.BG_LIST,
@@ -135,12 +135,25 @@ class MagicDownloaderApp(tk.Tk):
         )
         style.configure(
             "Treeview.Heading",
-            font=T.FONT_UI_BOLD,
-            background=T.BG_STATUS,
-            foreground=T.FG,
+            font=T.FONT_SMALL,
+            background=T.BG_LIST,
+            foreground=T.FG_MUTED,
             relief="flat",
-            borderwidth=1,
+            borderwidth=0,
+            padding=(6, 8),
         )
+        # clam draws a bevelled box around every heading cell; borderwidth=0
+        # doesn't remove it, the layout has to. This keeps the text element
+        # (which carries the ▲/▼ sort arrow) and drops the frame.
+        try:
+            style.layout("Treeview.Heading", [
+                ("Treeheading.cell", {"sticky": "nswe"}),
+                ("Treeheading.padding", {"sticky": "nswe", "children": [
+                    ("Treeheading.text", {"sticky": "w"})]}),
+            ])
+        except tk.TclError:
+            pass
+        style.map("Treeview.Heading", background=[("active", T.BG)])
         style.map(
             "Treeview",
             background=[("selected", T.SELECT)],
@@ -204,7 +217,7 @@ class MagicDownloaderApp(tk.Tk):
                 fg=T.FG_ON_DARK, font=("Segoe UI", 13, "bold"),
             ).pack()
 
-        sep = tk.Frame(bar, bg="#1e3f73", width=1)
+        sep = tk.Frame(bar, bg=T.TOOLBAR_SEP, width=1)
         sep.pack(side=tk.LEFT, fill=tk.Y, pady=10, padx=4)
 
         actions = [
@@ -232,18 +245,18 @@ class MagicDownloaderApp(tk.Tk):
             right,
             text="Browser: off",
             bg=T.BG_TOOLBAR,
-            fg="#ffb84d",
+            fg=T.AMBER,
             font=T.FONT_SMALL,
         )
         self.browser_badge.pack(anchor="e")
         tk.Label(
-            right, text="TOTAL SPEED", bg=T.BG_TOOLBAR, fg="#a8c4e8", font=T.FONT_SMALL
+            right, text="TOTAL SPEED", bg=T.BG_TOOLBAR, fg=T.FG_ON_DARK_MUTED, font=T.FONT_SMALL
         ).pack(anchor="e")
         self.speed_badge = tk.Label(
             right,
             text="0 B/s",
             bg=T.BG_TOOLBAR,
-            fg="#7dff9a",
+            fg=T.SPEED_BADGE,
             font=("Segoe UI", 16, "bold"),
         )
         self.speed_badge.pack(anchor="e")
@@ -356,14 +369,12 @@ class MagicDownloaderApp(tk.Tk):
         self._apply_column_widths()
 
         # Row tags for status colors
-        self.tree.tag_configure("Downloading", foreground=T.GREEN)
-        self.tree.tag_configure("Connecting", foreground=T.BLUE)
-        self.tree.tag_configure("Processing", foreground=T.BLUE)
-        self.tree.tag_configure("Paused", foreground=T.ORANGE)
-        self.tree.tag_configure("Complete", foreground="#1a7a32")
-        self.tree.tag_configure("Failed", foreground=T.RED)
-        self.tree.tag_configure("Cancelled", foreground=T.GRAY)
-        self.tree.tag_configure("Queued", foreground=T.GRAY)
+        # Straight from the theme, so a retheme can't leave one status behind.
+        for status, colour in T.STATUS_COLORS.items():
+            self.tree.tag_configure(status, foreground=colour)
+        # Composes with the status tags above rather than overriding them: those
+        # set only a foreground, this sets only a background.
+        self.tree.tag_configure("odd", background=T.STRIPE)
 
         self.tree.bind("<<TreeviewSelect>>", lambda e: self._on_selection_change())
         self.tree.bind("<Double-1>", lambda e: self._on_double_click())
@@ -469,7 +480,7 @@ class MagicDownloaderApp(tk.Tk):
         self.toast_bar = tk.Label(
             self,
             textvariable=self.toast_var,
-            bg="#1a7a32",
+            bg=T.TOAST_BG,
             fg="white",
             font=T.FONT_UI_BOLD,
             anchor="w",
@@ -699,13 +710,13 @@ class MagicDownloaderApp(tk.Tk):
         for iid in existing - job_ids:
             self.tree.delete(iid)
 
-        for job in jobs:
+        for idx, job in enumerate(jobs):
             values = self._job_row(job)
-            tag = job.status.value
+            tags = (job.status.value,) + (("odd",) if idx % 2 else ())
             if job.id in existing:
-                self.tree.item(job.id, values=values, tags=(tag,))
+                self.tree.item(job.id, values=values, tags=tags)
             else:
-                self.tree.insert("", "end", iid=job.id, values=values, tags=(tag,))
+                self.tree.insert("", "end", iid=job.id, values=values, tags=tags)
 
         for idx, job in enumerate(jobs):
             try:
@@ -872,11 +883,11 @@ class MagicDownloaderApp(tk.Tk):
         port = self.manager.settings.get("browser_port", 7373)
         if self._browser and self._browser.running:
             browser_txt = f"Browser API: 127.0.0.1:{port}"
-            self.browser_badge.configure(text=f"Browser: :{port}", fg="#7dff9a")
+            self.browser_badge.configure(text=f"Browser: :{port}", fg=T.SPEED_BADGE)
         else:
             err = (self._browser.last_error if self._browser else "") or "disabled"
             browser_txt = f"Browser API: off ({err})"
-            self.browser_badge.configure(text="Browser: off", fg="#ffb84d")
+            self.browser_badge.configure(text="Browser: off", fg=T.AMBER)
         self.status_right.configure(
             text=f"{browser_txt}   ·   Connections: {self.manager.settings.get('connections', 8)}"
         )
@@ -1937,7 +1948,7 @@ class MagicDownloaderApp(tk.Tk):
                     return Image.open(p)
             except Exception:
                 pass
-        return Image.new("RGB", (64, 64), "#2b579a")
+        return Image.new("RGB", (64, 64), T.BG_TOOLBAR)   # tray fallback
 
     def _setup_tray(self) -> None:
         """Create the system-tray icon. Degrades gracefully if unavailable."""

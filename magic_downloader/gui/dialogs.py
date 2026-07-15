@@ -459,7 +459,7 @@ class AddVideoDialog(tk.Toplevel):
                 fg=T.ORANGE,
             )
         else:
-            self.status.configure(text=f"{self._title or 'Video'} — {len(formats)} formats. Pick one and click Download.", fg="#1a7a32")
+            self.status.configure(text=f"{self._title or 'Video'} — {len(formats)} formats. Pick one and click Download.", fg=T.GREEN_DONE)
         first = self.tree.get_children()
         if first:
             self.tree.selection_set(first[0])
@@ -1011,7 +1011,7 @@ class SettingsDialog(tk.Toplevel):
         hint = self.ffmpeg_var.get().strip() or None
         found = ffmpeg_mod.find_ffmpeg(extra_hint=hint)
         if found:
-            self.ffmpeg_status.configure(text=f"✅ Found: {found}", fg="#1a7a32")
+            self.ffmpeg_status.configure(text=f"✅ Found: {found}", fg=T.GREEN_DONE)
         else:
             self.ffmpeg_status.configure(
                 text="⚠ Not found. Streaming video will save as .ts or "
@@ -1057,7 +1057,7 @@ class SettingsDialog(tk.Toplevel):
     def _install_done(self, path: str | None, error: str | None) -> None:
         self.install_btn.configure(state="normal")
         if path:
-            self.install_status.configure(text=f"✅ Installed: {path}", fg="#1a7a32")
+            self.install_status.configure(text=f"✅ Installed: {path}", fg=T.GREEN_DONE)
             self._refresh_ffmpeg_status()
         else:
             self.install_status.configure(text=f"Failed: {error}", fg=T.RED)
@@ -1384,7 +1384,7 @@ class AboutDialog(tk.Toplevel):
         txt.pack(side=tk.LEFT)
         tk.Label(txt, text="Magic Downloader", bg=T.BG_TOOLBAR, fg=T.FG_ON_DARK,
                  font=("Segoe UI", 15, "bold"), anchor="w").pack(anchor="w")
-        tk.Label(txt, text=f"Version {version}", bg=T.BG_TOOLBAR, fg="#cfe0f5",
+        tk.Label(txt, text=f"Version {version}", bg=T.BG_TOOLBAR, fg=T.FG_ON_DARK_MUTED,
                  font=T.FONT_UI, anchor="w").pack(anchor="w")
 
         body = tk.Frame(self, bg=T.BG, padx=18, pady=14)
