@@ -356,6 +356,18 @@ chrome.downloads.onCreated.addListener(async (item) => {
 
   handledDownloadIds.add(item.id);
   try {
+    // Check the app is actually reachable BEFORE touching the browser's
+    // download. The old order cancelled + erased first, then tried to hand off:
+    // if the app was off, the file was destroyed and gone (and every capture
+    // fired an offline toast). Now, when the app isn't running we leave the
+    // browser to download normally and just say so, once.
+    const health = await pingApp();
+    if (!health.ok) {
+      handledDownloadIds.delete(item.id);
+      notifyOffline();
+      return;
+    }
+
     let finalUrl = url;
     if (!item.finalUrl) {
       await sleep(150);
@@ -555,7 +567,7 @@ async function sendToApp(url, opts = {}) {
     const data = await res.json().catch(() => ({}));
     if (!res.ok || data.ok === false) {
       const err = data.error || `HTTP ${res.status}`;
-      notify("Magic Downloader", `Failed: ${err}. Is the app running?`);
+      notify("Magic Downloader", `Failed: ${err}. Is the app running?`, "md-add-failed");
       return { ok: false, error: err };
     }
     if (data.prompted) {
@@ -566,10 +578,7 @@ async function sendToApp(url, opts = {}) {
     }
     return { ok: true, ...data };
   } catch (e) {
-    notify(
-      "Magic Downloader",
-      "Cannot reach app. Start Magic Downloader (API on port " + cfg.port + ")."
-    );
+    notifyOffline();   // throttled, single reusable toast — never a storm
     return { ok: false, error: String(e.message || e) };
   }
 }
@@ -592,18 +601,44 @@ function basename(path) {
   return parts[parts.length - 1] || "";
 }
 
-function notify(title, message) {
+// Passing an id makes chrome REPLACE any existing notification with that id
+// instead of stacking a new toast. Without one, every call spawns a fresh
+// notification, and the OS drip-feeds a burst of them out one at a time — which
+// is exactly the flickering "Cannot reach app" storm when the app is off.
+function notify(title, message, id) {
   try {
-    chrome.notifications.create({
+    const opts = {
       type: "basic",
       iconUrl: "icons/icon128.png",
       title,
       message,
       silent: true, // no notification sound/beep
-    });
+    };
+    if (id) chrome.notifications.create(id, opts);
+    else chrome.notifications.create(opts);
   } catch (_) {
     /* notifications may be blocked */
   }
+}
+
+// The "app isn't running" notice. One reusable toast (fixed id), shown at most
+// once every OFFLINE_NOTICE_MS — so a page firing several downloads, or any
+// repeated failure, can never turn into a wall of toasts.
+const OFFLINE_NOTICE_ID = "md-app-offline";
+const OFFLINE_NOTICE_MS = 10000;
+let lastOfflineNotice = 0;
+async function notifyOffline() {
+  const now = Date.now();
+  if (now - lastOfflineNotice < OFFLINE_NOTICE_MS) return;
+  lastOfflineNotice = now;
+  // getConfig() rather than a bare `cfg`: this is a top-level helper with no
+  // config in scope, and the port is user-configurable.
+  const port = (await getConfig()).port;
+  notify(
+    "Magic Downloader",
+    "Cannot reach the app. Start Magic Downloader (API on port " + port + ").",
+    OFFLINE_NOTICE_ID
+  );
 }
 
 function sleep(ms) {
