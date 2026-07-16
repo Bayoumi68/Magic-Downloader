@@ -1179,6 +1179,12 @@ class DownloadProgressDialog(tk.Toplevel):
         self.open_path = open_path
         self.on_fold = on_fold      # app hook: register this download in the tray
         self._closed = False
+        # "Close when complete" should fire only when the download FINISHES while
+        # this window is open — not when the window is opened for an already-done
+        # download (which would just flash and vanish). Track whether we ever saw
+        # it mid-download, and schedule the close at most once.
+        self._saw_incomplete = False
+        self._close_scheduled = False
         self.title("Downloading — Magic Downloader")
         self.configure(bg=T.BG)
         self.geometry("580x350")
@@ -1271,6 +1277,9 @@ class DownloadProgressDialog(tk.Toplevel):
             self.destroy()
             return
 
+        if job.status != DownloadStatus.COMPLETE:
+            self._saw_incomplete = True     # it was still running at some point
+
         active = job.status == DownloadStatus.DOWNLOADING
         processing = job.status == DownloadStatus.PROCESSING
         icon = "✅" if job.status == DownloadStatus.COMPLETE else ("⚠" if job.status == DownloadStatus.FAILED else "⬇")
@@ -1315,7 +1324,11 @@ class DownloadProgressDialog(tk.Toplevel):
             self.pause_btn.configure(state="disabled")
             self.cancel_btn.configure(state="disabled")
             self.open_btn.pack(side=tk.LEFT, padx=6)
-            if self.close_when_done.get():
+            # Only when it finished while open (not opened already-complete), and
+            # only schedule the close once.
+            if (self.close_when_done.get() and self._saw_incomplete
+                    and not self._close_scheduled):
+                self._close_scheduled = True
                 self.after(1200, self._hide)
         else:  # FAILED / CANCELLED
             self.pause_btn.configure(text="Retry", state="normal")

@@ -680,6 +680,8 @@ class MagicDownloaderApp(tk.Tk):
         """Pop (or focus) a per-download progress window."""
         if not self.manager.settings.get("show_progress_dialog", True):
             return
+        if self.manager.get_job(job_id) is None:
+            return   # stale/removed row — don't open a window that self-destructs
         existing = self._progress_dialogs.get(job_id)
         if existing is not None and existing.winfo_exists():
             existing.restore()
