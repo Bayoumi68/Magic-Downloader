@@ -54,6 +54,10 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     # A version the user chose to skip; never prompt for it again (Help → About
     # still installs it on demand).
     "skipped_update": "",
+    # The version currently installed and when it was first launched, so the app
+    # can show "updated <date>". Set the first time a new version runs.
+    "installed_version": "",
+    "updated_at": 0.0,
     # Keep running in the system tray when the window is closed;
     # only "Exit" actually quits.
     "close_to_tray": True,

@@ -1171,11 +1171,13 @@ class DownloadProgressDialog(tk.Toplevel):
     ``open_path(Path)`` opens a file/folder.
     """
 
-    def __init__(self, master: tk.Misc, manager, job_id: str, open_path: Callable[[Path], None]) -> None:
+    def __init__(self, master: tk.Misc, manager, job_id: str, open_path: Callable[[Path], None],
+                 on_fold: Callable[[str], None] | None = None) -> None:
         super().__init__(master)
         self.manager = manager
         self.job_id = job_id
         self.open_path = open_path
+        self.on_fold = on_fold      # app hook: register this download in the tray
         self._closed = False
         self.title("Downloading — Magic Downloader")
         self.configure(bg=T.BG)
@@ -1239,6 +1241,12 @@ class DownloadProgressDialog(tk.Toplevel):
         self.cancel_btn = ttk.Button(btns, text="Cancel", command=self._cancel)
         self.cancel_btn.pack(side=tk.LEFT, padx=6)
         self.open_btn = ttk.Button(btns, text="Open", command=self._open_file)  # shown when complete
+        # Fold to the tray (IDM-style): keeps the window alive but hidden, and
+        # the download shows up in the tray icon's menu with its live %. Distinct
+        # from Hide (which closes this window) and from minimize (to the taskbar).
+        if self.on_fold is not None:
+            ttk.Button(btns, text="🔽 Tray", width=8, command=self._fold_to_tray).pack(
+                side=tk.RIGHT, padx=4)
         ttk.Button(btns, text="Hide", command=self._hide).pack(side=tk.RIGHT, padx=4)
         self.folder_btn = ttk.Button(btns, text="Open folder", command=self._open_folder)
         self.folder_btn.pack(side=tk.RIGHT, padx=4)
@@ -1346,6 +1354,25 @@ class DownloadProgressDialog(tk.Toplevel):
         except tk.TclError:
             pass
 
+    def _fold_to_tray(self) -> None:
+        """Hide the window but keep it alive; the app lists it in the tray menu."""
+        try:
+            self.withdraw()
+        except tk.TclError:
+            return
+        if self.on_fold is not None:
+            self.on_fold(self.job_id)
+
+    def restore(self) -> None:
+        """Bring a folded (or minimized) window back to the front."""
+        try:
+            self.deiconify()
+            self.state("normal")
+            self.lift()
+            self.focus_force()
+        except tk.TclError:
+            pass
+
 
 class AboutDialog(tk.Toplevel):
     """About box with the running version, an update check, and in-app update.
@@ -1358,7 +1385,8 @@ class AboutDialog(tk.Toplevel):
                  on_quit: Callable[[], None] | None = None,
                  auto_check: bool = False,
                  ready: tuple[str, str] | None = None,
-                 on_update_ready: Callable[[str, str], None] | None = None) -> None:
+                 on_update_ready: Callable[[str, str], None] | None = None,
+                 updated_at: float = 0.0) -> None:
         super().__init__(master)
         self.version = version
         self.on_quit = on_quit
@@ -1384,7 +1412,12 @@ class AboutDialog(tk.Toplevel):
         txt.pack(side=tk.LEFT)
         tk.Label(txt, text="Magic Downloader", bg=T.BG_TOOLBAR, fg=T.FG_ON_DARK,
                  font=("Segoe UI", 15, "bold"), anchor="w").pack(anchor="w")
-        tk.Label(txt, text=f"Version {version}", bg=T.BG_TOOLBAR, fg=T.FG_ON_DARK_MUTED,
+        ver_text = f"Version {version}"
+        if updated_at:
+            import time as _time
+            ver_text += "  ·  updated " + _time.strftime(
+                "%Y-%m-%d %H:%M", _time.localtime(updated_at))
+        tk.Label(txt, text=ver_text, bg=T.BG_TOOLBAR, fg=T.FG_ON_DARK_MUTED,
                  font=T.FONT_UI, anchor="w").pack(anchor="w")
 
         body = tk.Frame(self, bg=T.BG, padx=18, pady=14)

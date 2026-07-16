@@ -93,7 +93,9 @@ class MagicDownloaderApp(tk.Tk):
         self._ready_update: tuple[str, str] | None = None
         self._update_cancel = False    # set by Cancel; read by the download thread
         self._upd_version = ""
+        self._folded_downloads: list[str] = []   # progress dialogs folded to tray
 
+        self._record_version()         # stamp "updated at" on a new version
         self._build_menu()
         self._build_toolbar()
         self._build_body()
@@ -472,6 +474,15 @@ class MagicDownloaderApp(tk.Tk):
             font=T.FONT_SMALL,
             anchor="w",
         ).pack(side=tk.LEFT, padx=10)
+        # Version + when this build was installed — a quiet build stamp, far
+        # right, so it's always in view.
+        self.version_lbl = tk.Label(
+            self._status_frame, text=self._version_line(), bg=T.BG_STATUS,
+            fg=T.FG_MUTED, font=T.FONT_SMALL, anchor="e",
+        )
+        self.version_lbl.pack(side=tk.RIGHT, padx=10)
+        tk.Frame(self._status_frame, bg=T.BORDER, width=1).pack(
+            side=tk.RIGHT, fill=tk.Y, pady=5)
         self.status_right = tk.Label(
             self._status_frame, text="", bg=T.BG_STATUS, fg=T.FG_MUTED, font=T.FONT_SMALL, anchor="e"
         )
@@ -670,10 +681,11 @@ class MagicDownloaderApp(tk.Tk):
             return
         existing = self._progress_dialogs.get(job_id)
         if existing is not None and existing.winfo_exists():
-            existing.deiconify()
-            existing.lift()
+            existing.restore()
             return
-        dlg = DownloadProgressDialog(self, self.manager, job_id, self._open_path)
+        dlg = DownloadProgressDialog(
+            self, self.manager, job_id, self._open_path,
+            on_fold=self._fold_download_to_tray)
         self._progress_dialogs[job_id] = dlg
 
     def _update_progress_dialogs(self) -> None:
@@ -685,6 +697,12 @@ class MagicDownloaderApp(tk.Tk):
                 dlg.update_view()
             except tk.TclError:
                 self._progress_dialogs.pop(jid, None)
+        # Drop tray slots for downloads that no longer exist, so the list can't
+        # grow without bound as jobs are deleted.
+        alive = [j for j in self._folded_downloads if self.manager.get_job(j) is not None]
+        if len(alive) != len(self._folded_downloads):
+            self._folded_downloads = alive
+            self._refresh_tray_menu()
 
     def _maybe_rebuild_sidebar(self) -> None:
         cats = tuple((self.manager.settings.get("category_paths") or {}).keys())
@@ -1658,6 +1676,30 @@ class MagicDownloaderApp(tk.Tk):
             self._browser = None
         self._start_browser_server()
 
+    def _record_version(self) -> None:
+        """Stamp when this version was first launched, so About / the status bar
+        can show "updated <date>". Fires once per version (including the first
+        install, and after every in-app update, which relaunches the app)."""
+        from magic_downloader import __version__
+
+        s = self.manager.settings
+        if s.get("installed_version") != __version__:
+            s["installed_version"] = __version__
+            s["updated_at"] = time.time()
+            try:
+                self.manager.save_settings()
+            except Exception:  # noqa: BLE001
+                pass
+
+    def _version_line(self, long: bool = False) -> str:
+        from magic_downloader import __version__
+
+        ts = self.manager.settings.get("updated_at") or 0
+        if ts:
+            fmt = "%Y-%m-%d %H:%M" if long else "%b %d, %Y"
+            return f"v{__version__} · updated {time.strftime(fmt, time.localtime(ts))}"
+        return f"v{__version__}"
+
     def _about(self) -> None:
         """About box — shows the version and has the update check/install."""
         from magic_downloader import __version__
@@ -1671,6 +1713,7 @@ class MagicDownloaderApp(tk.Tk):
             on_quit=self._quit,
             ready=ready,
             on_update_ready=self._remember_ready_update,
+            updated_at=self.manager.settings.get("updated_at") or 0,
         )
 
     def _remember_ready_update(self, version: str, path: str) -> None:
@@ -2048,11 +2091,29 @@ class MagicDownloaderApp(tk.Tk):
         try:
             import pystray
 
+            # Downloads folded into the tray get one slot each. pystray evaluates
+            # the text/visible callables when the menu is opened, so each slot
+            # shows its download's live % and hides itself when unused — no need
+            # to rebuild the menu as progress ticks.
+            #
+            # A factory binds i by CLOSURE, not via a `lambda ..., i=i` default:
+            # pystray rejects an action whose co_argcount exceeds 2, and a default
+            # argument counts toward that.
+            def _slot(i):
+                return pystray.MenuItem(
+                    lambda item: self._tray_slot_text(i),
+                    lambda icon, item: self._tray_slot_click(i),
+                    visible=lambda item: self._tray_slot_visible(i),
+                )
+            slots = [_slot(i) for i in range(self.MAX_TRAY_DOWNLOADS)]
             menu = pystray.Menu(
                 pystray.MenuItem("Show Magic Downloader", self._tray_show, default=True),
                 pystray.MenuItem("Resume all", self._tray_resume_all),
                 pystray.MenuItem("Pause all", self._tray_pause_all),
                 pystray.Menu.SEPARATOR,
+                # When no download is folded, every slot is invisible and this
+                # collapses to just "Exit" below the separator.
+                *slots,
                 pystray.MenuItem("Exit", self._tray_exit),
             )
             self._tray = pystray.Icon(
@@ -2095,6 +2156,67 @@ class MagicDownloaderApp(tk.Tk):
 
     def _tray_pause_all(self, *_a) -> None:
         self.after(0, lambda: [self.manager.pause_job(j.id) for j in list(self.manager.jobs)])
+
+    # ── fold a download's progress window into the tray (IDM-style) ──────────
+
+    MAX_TRAY_DOWNLOADS = 8   # slots in the tray menu for folded downloads
+
+    def _fold_download_to_tray(self, job_id: str) -> None:
+        if job_id not in self._folded_downloads:
+            self._folded_downloads.append(job_id)
+        self._refresh_tray_menu()
+
+    def _restore_folded_download(self, job_id: str) -> None:
+        self._folded_downloads = [j for j in self._folded_downloads if j != job_id]
+        dlg = self._progress_dialogs.get(job_id)
+        if dlg is not None and dlg.winfo_exists():
+            dlg.restore()
+        else:
+            # The window was closed while folded — reopen it fresh.
+            self._open_progress(job_id)
+        self._refresh_tray_menu()
+
+    def _tray_folded_jobs(self) -> list:
+        """Folded downloads whose job still exists, pruned of the dead ones.
+
+        Called from the tray thread when the menu is built, so it stays simple
+        and swallows any race with the main thread mutating the list.
+        """
+        out = []
+        try:
+            for jid in list(self._folded_downloads):
+                if self.manager.get_job(jid) is not None:
+                    out.append(jid)
+        except Exception:  # noqa: BLE001
+            pass
+        return out
+
+    def _tray_slot_visible(self, i: int) -> bool:
+        return i < len(self._tray_folded_jobs())
+
+    def _tray_slot_text(self, i: int) -> str:
+        jobs = self._tray_folded_jobs()
+        if i >= len(jobs):
+            return ""
+        job = self.manager.get_job(jobs[i])
+        if job is None:
+            return ""
+        name = job.filename if len(job.filename) <= 34 else job.filename[:31] + "…"
+        return f"⬇ {name} — {job.progress:.0f}%"
+
+    def _tray_slot_click(self, i: int) -> None:
+        jobs = self._tray_folded_jobs()
+        if i < len(jobs):
+            jid = jobs[i]
+            self.after(0, lambda: self._restore_folded_download(jid))
+
+    def _refresh_tray_menu(self) -> None:
+        if self._tray is None:
+            return
+        try:
+            self._tray.update_menu()
+        except Exception:  # noqa: BLE001
+            pass
 
     def _restore_from_tray(self) -> None:
         try:
