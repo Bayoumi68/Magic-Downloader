@@ -22,7 +22,12 @@ def load_jobs() -> list[DownloadJob]:
 
 
 def save_jobs(jobs: list[DownloadJob]) -> None:
+    save_jobs_payload([j.to_dict() for j in jobs])
+
+
+def save_jobs_payload(payload: list[dict[str, Any]]) -> None:
+    """Write already-serialized job dicts. Split from save_jobs so a caller can
+    serialize under its state lock but do the (slow) disk write outside it."""
     ensure_dirs()
-    payload = [j.to_dict() for j in jobs]
     with open(JOBS_PATH, "w", encoding="utf-8") as f:
         json.dump(payload, f, indent=2)

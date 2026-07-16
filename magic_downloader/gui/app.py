@@ -94,6 +94,7 @@ class MagicDownloaderApp(tk.Tk):
         self._update_cancel = False    # set by Cancel; read by the download thread
         self._upd_version = ""
         self._folded_downloads: list[str] = []   # progress dialogs folded to tray
+        self._folded_snapshot: list = []          # lock-free (id, label) for the tray menu
 
         self._record_version()         # stamp "updated at" on a new version
         self._build_menu()
@@ -700,8 +701,15 @@ class MagicDownloaderApp(tk.Tk):
         # Drop tray slots for downloads that no longer exist, so the list can't
         # grow without bound as jobs are deleted.
         alive = [j for j in self._folded_downloads if self.manager.get_job(j) is not None]
-        if len(alive) != len(self._folded_downloads):
+        pruned = len(alive) != len(self._folded_downloads)
+        if pruned:
             self._folded_downloads = alive
+        # Refresh the lock-free tray snapshot each tick so the folded downloads'
+        # % stays current in the tray menu (built on the main thread, no lock on
+        # the tray side).
+        if self._folded_downloads or self._folded_snapshot:
+            self._rebuild_folded_snapshot()
+        if pruned:
             self._refresh_tray_menu()
 
     def _maybe_rebuild_sidebar(self) -> None:
@@ -2178,6 +2186,7 @@ class MagicDownloaderApp(tk.Tk):
     def _fold_download_to_tray(self, job_id: str) -> None:
         if job_id not in self._folded_downloads:
             self._folded_downloads.append(job_id)
+        self._rebuild_folded_snapshot()
         self._refresh_tray_menu()
 
     def _restore_folded_download(self, job_id: str) -> None:
@@ -2188,40 +2197,41 @@ class MagicDownloaderApp(tk.Tk):
         else:
             # The window was closed while folded — reopen it fresh.
             self._open_progress(job_id)
+        self._rebuild_folded_snapshot()
         self._refresh_tray_menu()
 
-    def _tray_folded_jobs(self) -> list:
-        """Folded downloads whose job still exists, pruned of the dead ones.
+    def _rebuild_folded_snapshot(self) -> None:
+        """Build the tray menu's data as a plain (job_id, label) list, on the
+        MAIN thread.
 
-        Called from the tray thread when the menu is built, so it stays simple
-        and swallows any race with the main thread mutating the list.
+        The tray menu's text/visible/action callables run on the pystray thread
+        (and are re-evaluated by update_menu() on the main thread when a fold
+        rebuilds the menu). If they called manager.get_job() they'd take the
+        manager lock there — and _persist holds that same lock across a disk
+        write of jobs.json — so opening the tray menu, or folding a second
+        download while others were active, stalled the whole GUI on that lock.
+        Reading a pre-built plain list needs no lock and can't stall.
         """
-        out = []
-        try:
-            for jid in list(self._folded_downloads):
-                if self.manager.get_job(jid) is not None:
-                    out.append(jid)
-        except Exception:  # noqa: BLE001
-            pass
-        return out
+        snap = []
+        for jid in list(self._folded_downloads):
+            job = self.manager.get_job(jid)   # main thread — lock here is fine
+            if job is None:
+                continue
+            name = job.filename if len(job.filename) <= 34 else job.filename[:31] + "…"
+            snap.append((jid, f"⬇ {name} — {job.progress:.0f}%"))
+        self._folded_snapshot = snap          # atomic reassign; tray reads lock-free
 
     def _tray_slot_visible(self, i: int) -> bool:
-        return i < len(self._tray_folded_jobs())
+        return i < len(self._folded_snapshot)
 
     def _tray_slot_text(self, i: int) -> str:
-        jobs = self._tray_folded_jobs()
-        if i >= len(jobs):
-            return ""
-        job = self.manager.get_job(jobs[i])
-        if job is None:
-            return ""
-        name = job.filename if len(job.filename) <= 34 else job.filename[:31] + "…"
-        return f"⬇ {name} — {job.progress:.0f}%"
+        snap = self._folded_snapshot          # one read; never touches the lock
+        return snap[i][1] if i < len(snap) else ""
 
     def _tray_slot_click(self, i: int) -> None:
-        jobs = self._tray_folded_jobs()
-        if i < len(jobs):
-            jid = jobs[i]
+        snap = self._folded_snapshot
+        if i < len(snap):
+            jid = snap[i][0]
             self.after(0, lambda: self._restore_folded_download(jid))
 
     def _refresh_tray_menu(self) -> None:

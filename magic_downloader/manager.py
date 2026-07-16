@@ -20,7 +20,7 @@ from magic_downloader.media.media_engine import MediaDownloadEngine
 from magic_downloader.media.ytdlp_engine import YtdlpEngine
 from magic_downloader.models import DownloadJob, DownloadStatus
 from magic_downloader.ratelimit import RateLimiter
-from magic_downloader.storage import load_jobs, save_jobs
+from magic_downloader.storage import load_jobs, save_jobs, save_jobs_payload
 
 Listener = Callable[[], None]
 
@@ -42,6 +42,7 @@ class DownloadManager:
         self._threads: dict[str, threading.Thread] = {}
         self._pause_events: dict[str, threading.Event] = {}
         self._lock = threading.RLock()
+        self._io_lock = threading.Lock()   # serializes jobs.json writes, apart from _lock
         self._listeners: list[Listener] = []
         self._persist_timer: float = 0.0
         self._last_progress_notify: float = 0.0
@@ -80,8 +81,16 @@ class DownloadManager:
         if not force and now - self._persist_timer < 1.0:
             return
         self._persist_timer = now
+        # Serialize under the state lock (fast, consistent), but do the disk
+        # write OUTSIDE it. Holding _lock across the write stalled every other
+        # lock user — get_job(), the tray menu reading a folded download's % —
+        # for the whole write, which showed up as the app halting when several
+        # downloads were folded to the tray. _io_lock serialises the writes
+        # themselves without blocking readers of the jobs list.
         with self._lock:
-            save_jobs(self.jobs)
+            payload = [j.to_dict() for j in self.jobs]
+        with self._io_lock:
+            save_jobs_payload(payload)
 
     def save_settings(self) -> None:
         save_settings(self.settings)
