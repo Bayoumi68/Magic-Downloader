@@ -343,11 +343,29 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 
 // ── capture browser downloads (unchanged behaviour) ────────────────────────
 
+// A brand-new download begins in this state; anything else is history.
+// startTime within this window of "now" is what tells a fresh download apart
+// from a replayed one.
+const FRESH_DOWNLOAD_MS = 15000;
+
 chrome.downloads.onCreated.addListener(async (item) => {
   const cfg = await getConfig();
   if (!cfg.enabled || !cfg.captureDownloads) return;
   if (!item || !item.id) return;
   if (handledDownloadIds.has(item.id)) return;
+
+  // MV3 service workers are ephemeral. Every time this one wakes — including
+  // when the desktop app connects — Chrome RE-FIRES onCreated for the downloads
+  // already in its list, i.e. the recent history, not just new downloads. And
+  // handledDownloadIds lives in memory, so it's empty after each wake and can't
+  // dedupe them. Left unguarded, that replays the whole history at the app: with
+  // the app running it re-queues every past download; with it off, each hand-off
+  // fails and the offline toast storms. So: only a download that is actually
+  // starting right now. A completed/interrupted item, or one whose startTime is
+  // more than a few seconds old, is history — ignore it.
+  if (item.state && item.state !== "in_progress") return;
+  const startedAt = item.startTime ? Date.parse(item.startTime) : NaN;
+  if (!Number.isNaN(startedAt) && Date.now() - startedAt > FRESH_DOWNLOAD_MS) return;
 
   const url = item.finalUrl || item.url || "";
   if (!url || !/^https?:\/\//i.test(url)) return;
