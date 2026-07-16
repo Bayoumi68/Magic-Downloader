@@ -1,3 +1,3 @@
 """Magic Downloader — fast multi-connection download manager."""
 
-__version__ = "0.5.24"
+__version__ = "0.5.25"

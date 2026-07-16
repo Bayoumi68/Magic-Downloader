@@ -1877,6 +1877,10 @@ class MagicDownloaderApp(tk.Tk):
     def _on_update_found(self, rel) -> None:
         if self._update_pending or self._is_skipped(rel.version):
             return
+        # A pending update always marks the tray (badge + tooltip), whichever
+        # mode is on — so the "bells" show even in automatic mode, which used to
+        # go straight to downloading and never touched the tray.
+        self._set_tray_update(rel.version)
         if not self.manager.settings.get("auto_install_updates", False):
             # A persistent banner + tray tooltip, NOT a 4.5s toast. The toast
             # rendered into the main window, so with the app closed to the tray
@@ -2076,14 +2080,24 @@ class MagicDownloaderApp(tk.Tk):
         if img is None:
             img = Image.new("RGBA", (64, 64), T.BG_TOOLBAR)   # tray fallback
         if badge:
-            # A red dot in the corner = "update waiting", visible at tray size.
+            # "Update waiting" — a big red disc with a white up-arrow, filling
+            # the lower-right ~40% of the icon. At a 16px tray size a small dot
+            # vanishes; this stays legible as a distinct red corner + arrow.
             img = img.copy()
             w, h = img.size
-            r = max(7, w // 4)
             d = ImageDraw.Draw(img)
-            d.ellipse([w - 2 * r, h - 2 * r, w - 1, h - 1],
-                      fill=(217, 48, 37, 255), outline=(255, 255, 255, 255),
-                      width=max(1, r // 4))
+            r = int(w * 0.30)                      # badge radius (~60% of a half)
+            cx, cy = w - r - 1, h - r - 1          # centre, tucked lower-right
+            d.ellipse([cx - r, cy - r, cx + r, cy + r],
+                      fill=(230, 40, 40, 255), outline=(255, 255, 255, 255),
+                      width=max(2, w // 28))
+            a = int(r * 0.82)                      # white up-arrow inside
+            d.polygon([(cx, cy - a // 2),
+                       (cx - a // 2, cy + a // 5),
+                       (cx + a // 2, cy + a // 5)],
+                      fill=(255, 255, 255, 255))
+            d.rectangle([cx - a // 6, cy, cx + a // 6, cy + a // 2],
+                        fill=(255, 255, 255, 255))
         return img
 
     def _setup_tray(self) -> None:
