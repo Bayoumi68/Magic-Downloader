@@ -262,7 +262,9 @@ class MagicDownloaderApp(tk.Tk):
         self.speed_badge.pack(anchor="e")
 
     def _build_body(self) -> None:
-        body = tk.Frame(self, bg=T.BG)
+        # The update banner packs itself directly above this, under the toolbar.
+        self._build_update_banner()
+        body = self._body = tk.Frame(self, bg=T.BG)
         body.pack(fill=tk.BOTH, expand=True)
 
         # ── Left category sidebar (hallmark) ──
@@ -1700,6 +1702,81 @@ class MagicDownloaderApp(tk.Tk):
 
         threading.Thread(target=work, daemon=True).start()
 
+    # ── "update available" banner (persistent) ──────────────────
+
+    def _build_update_banner(self) -> None:
+        self._available_update = None            # rel of an update waiting to install
+        self._dismissed_update_version = None    # banner hidden for this version
+        self._update_banner = tk.Frame(self, bg=T.ACCENT)
+        self._update_banner_lbl = tk.Label(
+            self._update_banner, text="", bg=T.ACCENT, fg="white",
+            font=T.FONT_UI_BOLD, anchor="w", padx=12, pady=7)
+        self._update_banner_lbl.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        tk.Button(
+            self._update_banner, text="Later", command=self._dismiss_update_banner,
+            bg=T.ACCENT, fg="white", relief="flat", bd=0, cursor="hand2",
+            activebackground=T.ACCENT_HOVER, activeforeground="white",
+            font=T.FONT_UI, padx=10,
+        ).pack(side=tk.RIGHT, padx=(0, 10))
+        tk.Button(
+            self._update_banner, text="  Update now  ",
+            command=self._update_now_from_banner,
+            bg="white", fg=T.ACCENT, relief="flat", bd=0, cursor="hand2",
+            activebackground="#eef4fb", activeforeground=T.ACCENT,
+            font=T.FONT_UI_BOLD,
+        ).pack(side=tk.RIGHT, padx=6, pady=5)
+
+    def _announce_update(self, rel) -> None:
+        """A newer version exists. Signal it in a way that survives the tray."""
+        self._available_update = rel
+        self._set_tray_update(rel.version)       # tooltip + badge (silent)
+        if self._dismissed_update_version == rel.version:
+            return                               # user hid the banner for this one
+        self._update_banner_lbl.configure(
+            text=f"  ⬆   Update available — version {rel.version} is ready to install.")
+        try:
+            self._update_banner.pack(fill=tk.X, side=tk.TOP, before=self._body)
+        except Exception:  # noqa: BLE001
+            self._update_banner.pack(fill=tk.X, side=tk.TOP)
+
+    def _dismiss_update_banner(self) -> None:
+        if self._available_update:
+            self._dismissed_update_version = self._available_update.version
+        try:
+            self._update_banner.pack_forget()
+        except tk.TclError:
+            pass
+
+    def _update_now_from_banner(self) -> None:
+        # Reuse the tested About flow (check → download → verify → ask → install).
+        from magic_downloader import __version__
+
+        ready = self._ready_update
+        if ready and not Path(ready[1]).exists():
+            ready = self._ready_update = None
+        AboutDialog(
+            self, __version__, logo=getattr(self, "_brand_emblem", None),
+            on_quit=self._quit, auto_check=True, ready=ready,
+            on_update_ready=self._remember_ready_update,
+        )
+
+    def _set_tray_update(self, version: str) -> None:
+        """Silently mark the tray icon: tooltip text + a small badge dot.
+
+        No balloon — pystray's plays a Windows sound and can't be silenced. The
+        tooltip is visible on hover even while the window is hidden.
+        """
+        if self._tray is None:
+            return
+        try:
+            self._tray.title = f"Magic Downloader — update {version} available"
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            self._tray.icon = self._tray_image(badge=True)
+        except Exception:  # noqa: BLE001
+            pass
+
     # ── update download progress ────────────────────────────────
 
     def _download_started(self, version: str) -> None:
@@ -1758,9 +1835,12 @@ class MagicDownloaderApp(tk.Tk):
         if self._update_pending or self._is_skipped(rel.version):
             return
         if not self.manager.settings.get("auto_install_updates", False):
-            self._show_toast(
-                f"Update available: version {rel.version} — Help → About to install it."
-            )
+            # A persistent banner + tray tooltip, NOT a 4.5s toast. The toast
+            # rendered into the main window, so with the app closed to the tray
+            # (its default resting state) the update notice was painted into a
+            # hidden window and never seen. This is visible whenever the window
+            # is, and the tray tooltip shows it even while hidden.
+            self._announce_update(rel)
             return
         # Automatic: fetch it now, then ASK before installing.
         self._update_pending = True
@@ -1934,21 +2014,34 @@ class MagicDownloaderApp(tk.Tk):
         except Exception:  # noqa: BLE001 — cosmetic only
             pass
 
-    def _tray_image(self):
-        from PIL import Image
+    def _tray_image(self, badge: bool = False):
+        from PIL import Image, ImageDraw
 
         from magic_downloader.paths import RESOURCE_ROOT, extension_dir
 
+        img = None
         for p in (
             extension_dir() / "icons" / "icon128.png",
             RESOURCE_ROOT / "browser_extension" / "icons" / "icon128.png",
         ):
             try:
                 if p.exists():
-                    return Image.open(p)
+                    img = Image.open(p).convert("RGBA")
+                    break
             except Exception:
                 pass
-        return Image.new("RGB", (64, 64), T.BG_TOOLBAR)   # tray fallback
+        if img is None:
+            img = Image.new("RGBA", (64, 64), T.BG_TOOLBAR)   # tray fallback
+        if badge:
+            # A red dot in the corner = "update waiting", visible at tray size.
+            img = img.copy()
+            w, h = img.size
+            r = max(7, w // 4)
+            d = ImageDraw.Draw(img)
+            d.ellipse([w - 2 * r, h - 2 * r, w - 1, h - 1],
+                      fill=(217, 48, 37, 255), outline=(255, 255, 255, 255),
+                      width=max(1, r // 4))
+        return img
 
     def _setup_tray(self) -> None:
         """Create the system-tray icon. Degrades gracefully if unavailable."""
