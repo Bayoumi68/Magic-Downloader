@@ -1197,11 +1197,24 @@ class DownloadProgressDialog(tk.Toplevel):
         header = tk.Frame(self, bg=T.BG_TOOLBAR, height=44)
         header.pack(fill=tk.X)
         header.pack_propagate(False)
+        # Fold-to-tray lives on the title bar (IDM-style), packed first so the
+        # title fills the space to its left. Shown only while the download is
+        # still running (update_view hides it once it's finished).
+        if self.on_fold is not None:
+            self.tray_btn = tk.Button(
+                header, text=" ▾ Tray ", command=self._fold_to_tray,
+                bg=T.BG_TOOLBAR, fg=T.FG_ON_DARK, relief="flat", bd=0,
+                activebackground=T.ACCENT_HOVER, activeforeground="white",
+                font=T.FONT_TOOLBAR, cursor="hand2",
+            )
+            self.tray_btn.pack(side=tk.RIGHT, padx=(0, 8))
+        else:
+            self.tray_btn = None
         self.title_lbl = tk.Label(
             header, text=f"  ⬇  {job.filename if job else 'download'}", bg=T.BG_TOOLBAR,
             fg=T.FG_ON_DARK, font=T.FONT_TITLE, anchor="w",
         )
-        self.title_lbl.pack(fill=tk.BOTH, expand=True, padx=12)
+        self.title_lbl.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=12)
 
         body = tk.Frame(self, bg=T.BG, padx=16, pady=12)
         body.pack(fill=tk.BOTH, expand=True)
@@ -1247,12 +1260,7 @@ class DownloadProgressDialog(tk.Toplevel):
         self.cancel_btn = ttk.Button(btns, text="Cancel", command=self._cancel)
         self.cancel_btn.pack(side=tk.LEFT, padx=6)
         self.open_btn = ttk.Button(btns, text="Open", command=self._open_file)  # shown when complete
-        # Fold to the tray (IDM-style): keeps the window alive but hidden, and
-        # the download shows up in the tray icon's menu with its live %. Distinct
-        # from Hide (which closes this window) and from minimize (to the taskbar).
-        if self.on_fold is not None:
-            ttk.Button(btns, text="🔽 Tray", width=8, command=self._fold_to_tray).pack(
-                side=tk.RIGHT, padx=4)
+        # (Fold-to-tray moved to the title bar; see the header above.)
         ttk.Button(btns, text="Hide", command=self._hide).pack(side=tk.RIGHT, padx=4)
         self.folder_btn = ttk.Button(btns, text="Open folder", command=self._open_folder)
         self.folder_btn.pack(side=tk.RIGHT, padx=4)
@@ -1279,6 +1287,16 @@ class DownloadProgressDialog(tk.Toplevel):
 
         if job.status != DownloadStatus.COMPLETE:
             self._saw_incomplete = True     # it was still running at some point
+
+        # Fold-to-tray only makes sense while the download is still running;
+        # hide the title-bar button once it's finished/failed/cancelled.
+        if self.tray_btn is not None:
+            terminal = job.status in (
+                DownloadStatus.COMPLETE, DownloadStatus.FAILED, DownloadStatus.CANCELLED)
+            if terminal and self.tray_btn.winfo_ismapped():
+                self.tray_btn.pack_forget()
+            elif not terminal and not self.tray_btn.winfo_ismapped():
+                self.tray_btn.pack(side=tk.RIGHT, padx=(0, 8))
 
         active = job.status == DownloadStatus.DOWNLOADING
         processing = job.status == DownloadStatus.PROCESSING

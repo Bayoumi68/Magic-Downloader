@@ -700,18 +700,35 @@ class MagicDownloaderApp(tk.Tk):
                 dlg.update_view()
             except tk.TclError:
                 self._progress_dialogs.pop(jid, None)
-        # Drop tray slots for downloads that no longer exist, so the list can't
-        # grow without bound as jobs are deleted.
-        alive = [j for j in self._folded_downloads if self.manager.get_job(j) is not None]
-        pruned = len(alive) != len(self._folded_downloads)
-        if pruned:
-            self._folded_downloads = alive
-        # Refresh the lock-free tray snapshot each tick so the folded downloads'
-        # % stays current in the tray menu (built on the main thread, no lock on
-        # the tray side).
+        # A folded download leaves the tray as soon as it stops running:
+        #   • complete  → close its hidden window (it's done; the grid shows it)
+        #   • failed / cancelled / removed → bring the window back so it isn't
+        #     left stranded off-screen.
+        terminal = (DownloadStatus.COMPLETE, DownloadStatus.FAILED, DownloadStatus.CANCELLED)
+        changed = False
+        for jid in list(self._folded_downloads):
+            job = self.manager.get_job(jid)
+            if job is not None and job.status not in terminal:
+                continue
+            self._folded_downloads.remove(jid)
+            changed = True
+            dlg = self._progress_dialogs.get(jid)
+            if dlg is None or not dlg.winfo_exists():
+                self._progress_dialogs.pop(jid, None)
+            elif job is not None and job.status == DownloadStatus.COMPLETE:
+                dlg._closed = True
+                try:
+                    dlg.destroy()
+                except tk.TclError:
+                    pass
+                self._progress_dialogs.pop(jid, None)
+            else:
+                dlg.restore()   # failed/cancelled — don't leave it hidden
+        # Refresh the lock-free tray snapshot each tick so folded downloads' %
+        # stays current (built on the main thread; the tray side takes no lock).
         if self._folded_downloads or self._folded_snapshot:
             self._rebuild_folded_snapshot()
-        if pruned:
+        if changed:
             self._refresh_tray_menu()
 
     def _maybe_rebuild_sidebar(self) -> None:
