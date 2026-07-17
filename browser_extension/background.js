@@ -17,7 +17,9 @@ const B = (typeof browser !== "undefined" && browser) || chrome;
 const DEFAULTS = {
   port: 7373,
   token: "",
-  captureDownloads: true,
+  // OFF by default: taking over the browser's own downloads is a surprising,
+  // heavy behaviour, so the user opts in explicitly from the popup.
+  captureDownloads: false,
   minSizeBytes: 0, // 0 = capture all; set e.g. 102400 to skip tiny files
   enabled: true,
   showVideoButton: true,
@@ -545,6 +547,11 @@ async function probeApp(url, opts = {}) {
 
 async function collectCookies(url) {
   try {
+    // `cookies` is an OPTIONAL permission the user grants explicitly (a toggle
+    // in the popup). Until then we read nothing and send no cookies — public
+    // downloads still work; only login-gated ones need the opt-in.
+    const granted = await B.permissions.contains({ permissions: ["cookies"] });
+    if (!granted) return "";
     const cookies = await B.cookies.getAll({ url });
     if (!cookies?.length) return "";
     return cookies.map((c) => `${c.name}=${c.value}`).join("; ");

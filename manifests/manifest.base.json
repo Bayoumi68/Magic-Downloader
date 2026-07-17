@@ -7,12 +7,14 @@
     "contextMenus",
     "downloads",
     "storage",
-    "cookies",
     "notifications",
     "activeTab",
     "tabs",
     "webRequest",
     "webNavigation"
+  ],
+  "optional_permissions": [
+    "cookies"
   ],
   "host_permissions": [
     "http://127.0.0.1/*",

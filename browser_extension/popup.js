@@ -45,6 +45,16 @@ async function load() {
   $("port").value = cfg.port || 7373;
   $("token").value = cfg.token || "";
 
+  // Reflect the ACTUAL granted state of the optional `cookies` permission,
+  // not a stored preference — the browser is the source of truth.
+  try {
+    $("sendCookies").checked = await B.permissions.contains({
+      permissions: ["cookies"],
+    });
+  } catch (_) {
+    $("sendCookies").checked = false;
+  }
+
   const tab = await getActiveTab();
   activeTab = tab || null;
   activeTabId = tab ? tab.id : null;
@@ -257,6 +267,28 @@ $("save").addEventListener("click", async () => {
   $("port").value = port;
   await recheck();
   $("statusDetail").textContent = "Settings saved";
+});
+
+// Explicit, in-gesture opt-in for reading cookies. Checking the box triggers
+// the browser's own permission prompt; unchecking revokes it immediately.
+$("sendCookies").addEventListener("change", async (e) => {
+  const want = e.currentTarget.checked;
+  try {
+    if (want) {
+      const granted = await B.permissions.request({ permissions: ["cookies"] });
+      e.currentTarget.checked = granted;      // stay unchecked if the user declines
+      $("statusDetail").textContent = granted
+        ? "Login cookies will be sent for private downloads."
+        : "Cookie access not granted — public downloads still work.";
+    } else {
+      await B.permissions.remove({ permissions: ["cookies"] });
+      $("statusDetail").textContent = "Cookie access turned off.";
+    }
+  } catch (_) {
+    e.currentTarget.checked = await B.permissions
+      .contains({ permissions: ["cookies"] })
+      .catch(() => false);
+  }
 });
 
 $("recheck").addEventListener("click", async () => {

@@ -23,13 +23,26 @@ and it is not stored by us — we have no servers.
 
 ## What the browser extension accesses, and why
 
-| Data / permission | Why it's used | Where it goes |
-|---|---|---|
-| Page/media URLs (`webRequest`, host access) | Detect downloadable video/audio and show the download button | Only your local app at `http://127.0.0.1:7373` |
-| Cookies for the current site (`cookies`) | So downloads of files that require your login work | Sent only to the local app to perform that one download |
-| Active tab title/URL (`tabs`, `activeTab`) | Name the file and know which page's video to grab | Only the local app |
-| Extension settings (`storage`) | Remember your port/token and preferences | Stored locally in your browser |
-| `downloads`, `notifications`, `contextMenus` | Capture browser downloads, show status, right-click menu | Local only |
+| Data / permission | When | Why it's used | Where it goes |
+|---|---|---|---|
+| Page/media URLs (`webRequest`, host access) | At install | Detect downloadable video/audio and show the download button | Only your local app at `http://127.0.0.1:7373` |
+| Active tab title/URL (`tabs`, `activeTab`) | At install | Name the file and know which page's video to grab | Only the local app |
+| Extension settings (`storage`) | At install | Remember your port/token and preferences | Stored locally in your browser |
+| `contextMenus`, `notifications` | At install | Right-click "Download with…" menu, and status messages | Local only |
+| **Cookies (`cookies`)** | **Optional — you turn it on** | Send the current site's login cookies so private/logged-in downloads work | Sent only to the local app for that one download |
+| **Download take-over (`downloads`)** | **Off by default — you turn it on** | Intercept a normal browser download and hand it to the app | Local only |
+
+**You are asked explicitly for the sensitive parts:**
+
+- **Cookies are never read until you enable it.** `cookies` is an *optional*
+  permission. It stays off until you tick **"Send my login cookies for private
+  downloads"** in the popup, which triggers the browser's own permission prompt.
+  Until then the extension reads no cookies and sends none — public downloads
+  still work; only login-gated ones need this. You can turn it back off any time
+  (the permission is revoked immediately).
+- **The extension does not touch your browser downloads by default.** Taking
+  over ("capturing") a normal download only happens after you tick **"Capture
+  normal browser downloads"** in the popup.
 
 **Nothing is sent to the internet by the extension except the download request
 to your own computer** (`127.0.0.1`). Fetching the actual files goes directly
