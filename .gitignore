@@ -22,3 +22,6 @@ MagicDownloader-*.zip
 build_log*.txt
 installer/
 web-ext-artifacts/
+
+# Generated per-browser by build.js / build_extension.py (source of truth: manifests/)
+browser_extension/manifest.json

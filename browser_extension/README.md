@@ -17,12 +17,22 @@ Grabs **videos** and downloads from **Chrome**, **Edge**, or **Brave** and sends
 
 ## Install (unpacked)
 
+> **First, generate the manifest.** `browser_extension/manifest.json` is built
+> per-browser and is git-ignored, so run this once from the project root before
+> loading the folder:
+>
+> ```powershell
+> node build.js --chrome     # Chrome / Edge / Brave
+> #   or:  node build.js --firefox
+> ```
+
 ### Chrome / Brave
 
-1. Open `chrome://extensions`
-2. Turn on **Developer mode**
-3. Click **Load unpacked**
-4. Select this folder:
+1. Run `node build.js --chrome`
+2. Open `chrome://extensions`
+3. Turn on **Developer mode**
+4. Click **Load unpacked**
+5. Select this folder:
 
    `E:\PycharmProjects\Magic_downloader\browser_extension`
 
@@ -39,15 +49,17 @@ install permanently** (this is why a permanent Firefox add-on must be on addons.
 — it's signed). See **[../FIREFOX_INSTALL.md](../FIREFOX_INSTALL.md)** for the
 full guide. Short version:
 
-- **Permanent, any Firefox:** upload `../magic_downloader_extension.zip` to
+- **Permanent, any Firefox:** build `../magic_downloader_firefox.zip`
+  (`python build_extension.py`) and upload it to
   [AMO Developer Hub](https://addons.mozilla.org/developers/addon/submit/distribution)
   as **“On your own”** (self-distribution) → Mozilla auto-signs it (free, no
   review) → download the signed `.xpi` → `about:addons` → ⚙ → **Install Add-on
   From File…**
 - **Permanent, unsigned:** only in Firefox **Developer Edition / Nightly / ESR**
   with `xpinstall.signatures.required=false` in `about:config`.
-- **Temporary (test only):** `about:debugging` → **Load Temporary Add-on…** →
-  pick `manifest.json` (wiped on restart).
+- **Temporary (test only):** run `node build.js --firefox`, then
+  `about:debugging` → **Load Temporary Add-on…** → pick `manifest.json`
+  (wiped on restart).
 
 After installing, grant **“Access your data for all websites”** in the
 extension's Permissions (Firefox MV3 makes site access opt-in), and keep the

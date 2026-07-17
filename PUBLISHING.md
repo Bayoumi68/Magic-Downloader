@@ -69,7 +69,7 @@ A more store-friendly architecture note is at the end (**Native Messaging**).
 ### 2a. Firefox — Add-ons (AMO)  ·  FREE  ·  recommended first
 Two ways, both give a **signed** add-on:
 - **Listed** (public, searchable): [Developer Hub → Submit](https://addons.mozilla.org/developers/addon/submit/distribution)
-  → "On this site" → upload `magic_downloader_extension.zip` → passes a review →
+  → "On this site" → upload `magic_downloader_firefox.zip` → passes a review →
   appears on addons.mozilla.org, one-click install, fully trusted.
 - **Unlisted** (self-distribution): same page → "On your own" → Mozilla signs it
   instantly with no public review → you get a signed `.xpi` you host yourself
@@ -93,16 +93,37 @@ Two ways, both give a **signed** add-on:
 - **Opera** has its own free [add-ons store](https://addons.opera.com/developer/).
 
 ### Per-store manifest note
-The current `manifest.json` is cross-browser: it has both `background.service_worker`
-(Chrome/Edge) **and** `background.scripts` + `browser_specific_settings.gecko`
-(Firefox). Store validators are picky:
-- **Firefox/AMO:** keep `scripts` + `browser_specific_settings`.
-- **Chrome/Edge:** ideally submit a variant with **only** `service_worker` and
-  **without** `browser_specific_settings` to avoid "unrecognized key" warnings.
+Chrome and Firefox need different background formats, and Chrome **refuses to
+load** any MV3 manifest that contains `background.scripts` ("requires manifest
+version of 2 or lower"). So the two are never mixed: the manifest is assembled
+per-browser from an isolated `manifests/` folder that lives **outside**
+`browser_extension/`.
 
-Keep the two variants as `manifest.chrome.json` / `manifest.firefox.json` and
-copy the right one to `manifest.json` before zipping for that store. (I can
-generate both on request.)
+`manifests/` holds three files:
+- `manifest.base.json` — everything shared (name, version, permissions,
+  content_scripts, action, icons); **no** `background` key.
+- `manifest.chrome.json` — overlay: `background.service_worker`.
+- `manifest.firefox.json` — overlay: `background.scripts` + `browser_specific_settings.gecko`.
+
+Build the per-store zips (each gets base + its overlay as `manifest.json`):
+
+```powershell
+python build_extension.py
+#  -> magic_downloader_chrome.zip   (service_worker only)
+#  -> magic_downloader_firefox.zip  (scripts + gecko)
+```
+
+For **Load unpacked** dev testing, generate the single manifest into
+`browser_extension/` first (it is git-ignored, so a fresh clone has none):
+
+```powershell
+node build.js --chrome     # or:  node build.js --firefox
+```
+
+`build.js` also deletes any stale `manifest.chrome.json` / `manifest.firefox.json`
+left inside `browser_extension/`, so the folder Chrome loads never contains a
+`scripts` key. **Bump the version in `manifests/manifest.base.json`** (not in the
+generated `browser_extension/manifest.json`).
 
 ---
 

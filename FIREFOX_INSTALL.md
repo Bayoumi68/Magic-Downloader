@@ -13,12 +13,13 @@ So you have exactly two ways to keep this extension installed permanently:
   off (**Option A** below). This is what you want.
 - **Regular Firefox** → it must be signed (Option B).
 
-Packaged files (ready to install):
+Build the Firefox package (`python build_extension.py` from the project root):
 
 ```
-E:\PycharmProjects\Magic_downloader\magic_downloader_extension.xpi   (install this)
-E:\PycharmProjects\Magic_downloader\magic_downloader_extension.zip   (for AMO upload)
+E:\PycharmProjects\Magic_downloader\magic_downloader_firefox.zip   (install this / AMO upload)
 ```
+
+Rename it to `.xpi` if a step below asks for one — Firefox accepts either.
 
 ---
 
@@ -36,7 +37,7 @@ uploaded anywhere.
    **`xpinstall.signatures.required`**, and set it to **`false`**
    (double-click to flip it).
 3. Open `about:addons` → gear ⚙ → **Install Add-on From File…** → choose
-   **`magic_downloader_extension.xpi`**.
+   **`magic_downloader_firefox.zip`**.
 4. Confirm **Add**. It now stays installed across restarts — permanently, unsigned.
 5. Grant site access (see the end of this file).
 
@@ -68,7 +69,7 @@ permanently — but it does require a free account.
 1. Create a free account and open the
    **[Developer Hub → Submit a New Add-on](https://addons.mozilla.org/developers/addon/submit/distribution)**.
 2. Choose **“On your own”** (self / unlisted distribution) — *not* "On this site".
-3. Upload `magic_downloader_extension.zip`.
+3. Upload `magic_downloader_firefox.zip` (build it with `python build_extension.py`).
 4. Mozilla validates and **signs it automatically** (seconds to a couple minutes).
 5. **Download the signed `.xpi`.**
 6. `about:addons` → gear ⚙ → **Install Add-on From File…** → pick the signed
@@ -81,7 +82,9 @@ npm install -g web-ext        # one-time (needs Node.js)
 
 # Get API credentials once from:
 #   https://addons.mozilla.org/developers/addon/api/key/
-cd E:\PycharmProjects\Magic_downloader\browser_extension
+cd E:\PycharmProjects\Magic_downloader
+node build.js --firefox        # put the Firefox manifest in browser_extension\
+cd browser_extension
 web-ext sign --channel=unlisted --api-key=YOUR_JWT_ISSUER --api-secret=YOUR_JWT_SECRET
 ```
 
@@ -94,8 +97,9 @@ web-ext sign --channel=unlisted --api-key=YOUR_JWT_ISSUER --api-secret=YOUR_JWT_
 
 For a quick test only:
 
-1. `about:debugging#/runtime/this-firefox`
-2. **Load Temporary Add-on…** → select
+1. Run `node build.js --firefox` (writes the Firefox `browser_extension\manifest.json`).
+2. `about:debugging#/runtime/this-firefox`
+3. **Load Temporary Add-on…** → select
    `browser_extension\manifest.json`.
 
 ---

@@ -16,6 +16,16 @@ STEP 1 — Start Magic Downloader
 --------------------------------------------------------
 STEP 2 — Install the extension (Chrome / Edge / Brave)
 --------------------------------------------------------
+  0. Generate the Chrome manifest (once, or after updating):
+
+     node build.js --chrome
+
+     (This writes browser_extension\manifest.json for Chrome.
+      The file is generated on purpose — a fresh copy of the
+      project won't have it until you run this. Pre-built store
+      zips already include it, so skip this if you installed
+      from magic_downloader_chrome.zip.)
+
   1. Copy this folder path:
 
      E:\PycharmProjects\Magic_downloader\browser_extension
@@ -68,9 +78,10 @@ STEP 2 (Firefox) — Install the extension permanently
      Click the gear icon (top-right) ->
        "Install Add-on From File..."
 
-  4. Select this file:
+  4. Build the Firefox package, then select it:
 
-       E:\PycharmProjects\Magic_downloader\magic_downloader_extension.xpi
+       python build_extension.py
+       E:\PycharmProjects\Magic_downloader\magic_downloader_firefox.zip
 
   5. Click "Add". It now stays installed across restarts.
 
