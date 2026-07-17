@@ -1,10 +1,25 @@
 # Privacy Policy — Magic Downloader
 
-_Last updated: 2026-07-13_
+_Last updated: 2026-07-16_
 
 Magic Downloader is a local download manager and browser companion. **It does
 not collect, transmit, or sell your personal data.** There are no analytics, no
 tracking, and no remote servers operated by us.
+
+## Single purpose
+
+The extension has one purpose: **detect downloadable video and files on the page
+you are viewing and hand them to the Magic Downloader desktop app on your own
+computer** to download.
+
+## Limited use of data
+
+Consistent with the Chrome Web Store Developer Program Policies (Limited Use):
+the data the extension touches (page/media URLs, the current site's cookies, the
+active tab's title/URL) is used **only** to provide this user-facing feature. It
+is **never** sold, never used for advertising or profiling, and never sent
+anywhere except your own local app at `http://127.0.0.1:7373`. No humans read it
+and it is not stored by us — we have no servers.
 
 ## What the browser extension accesses, and why
 
