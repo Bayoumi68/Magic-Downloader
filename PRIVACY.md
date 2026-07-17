@@ -1,6 +1,6 @@
 # Privacy Policy — Magic Downloader
 
-_Last updated: 2026-07-16_
+_Last updated: 2026-07-17_
 
 Magic Downloader is a local download manager and browser companion. **It does
 not collect, transmit, or sell your personal data.** There are no analytics, no
@@ -20,6 +20,27 @@ active tab's title/URL) is used **only** to provide this user-facing feature. It
 is **never** sold, never used for advertising or profiling, and never sent
 anywhere except your own local app at `http://127.0.0.1:7373`. No humans read it
 and it is not stored by us — we have no servers.
+
+## What the stores show (data-collection disclosures)
+
+Both stores link to this same policy, and both display the same disclosure:
+
+**Firefox (AMO) data-collection permissions** — declared in the add-on's manifest,
+so Firefox shows a consent panel at install:
+
+- **Required — Website activity & Website content:** the URL of the page you
+  download from and the detected media URLs. These are handed to your local app
+  so it can fetch the file. This is inherent to what a download helper does.
+- **Optional — Authentication information:** the current site's login cookies,
+  **only** if you turn on the cookies toggle (see below).
+
+**Chrome Web Store** — certified under the Developer Program's *Limited Use*
+policy for the same data (website content / web history, and — optional — the
+site's authentication cookies): used only for the download feature, **not sold,
+not used for advertising or profiling**.
+
+In both cases the data goes **only to your own local app** (`http://127.0.0.1:7373`),
+never to the developer, and there is **no analytics and no remote code**.
 
 ## What the browser extension accesses, and why
 
