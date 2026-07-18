@@ -1012,6 +1012,12 @@ class SettingsDialog(tk.Toplevel):
                         variable=self.ts_out_var).grid(row=9, column=0, columnspan=3, sticky="w")
         self._hint(f, 10, "Off = clean, seekable .mp4 (recommended). On = one MPEG-TS file, like "
                           "classic download managers. Needs ffmpeg; applies to HLS/DASH video.")
+
+        self.smaller_var = tk.BooleanVar(value=bool(self.settings.get("prefer_smaller_files", False)))
+        ttk.Checkbutton(f, text="Prefer smaller files (efficient AV1/VP9 codecs, leaner bitrate)",
+                        variable=self.smaller_var).grid(row=11, column=0, columnspan=3, sticky="w", pady=(10, 0))
+        self._hint(f, 12, "For one-click / “Best” video downloads: at the chosen resolution, picks the "
+                          "smallest encode instead of the largest. Same quality tier, smaller file.")
         self._refresh_ffmpeg_status()
 
     def _refresh_ffmpeg_status(self) -> None:
@@ -1147,6 +1153,7 @@ class SettingsDialog(tk.Toplevel):
         )
         self.settings["ffmpeg_path"] = self.ffmpeg_var.get().strip()
         self.settings["stream_output_ts"] = bool(self.ts_out_var.get())
+        self.settings["prefer_smaller_files"] = bool(self.smaller_var.get())
 
         self.settings["browser_integration"] = bool(self.browser_on.get())
         self.settings["confirm_browser_captures"] = bool(self.confirm_captures.get())

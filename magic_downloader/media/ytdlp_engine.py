@@ -272,26 +272,59 @@ class YtdlpEngine:
     def _cancelled(self) -> bool:
         return self._stop or self.cancel_check()
 
+    def _prefer_smaller(self) -> bool:
+        """User wants the smallest encode at a given resolution, not the biggest."""
+        try:
+            from magic_downloader import config
+            return bool(config.load_settings().get("prefer_smaller_files", False))
+        except Exception:  # noqa: BLE001 — a bad settings file must not break a download
+            return False
+
     def _format_selector(self, has_ffmpeg: bool) -> str:
         meta = self.job.media_meta or {}
         fmt = str(meta.get("format_id") or "").strip()
         height = int(meta.get("height") or 0)
         audio_only = bool(meta.get("audio_only"))
 
+        # "Prefer smaller": keep a sane stereo audio track (cap ~160 kbps) instead
+        # of the largest — often 384 kbps 5.1 surround — one, and prefer efficient
+        # video codecs (AV1 > VP9) at the requested resolution. Same quality tier,
+        # smaller file. `capaud` has NO "/" so it can't inject a stray audio-only
+        # option mid-chain; an uncapped fallback closes each chain.
+        small = self._prefer_smaller()
+        capaud = "bestaudio[abr<=160]"
+
         if audio_only:
-            return "bestaudio/best"
+            return f"{capaud}/bestaudio/best" if small else "bestaudio/best"
         if fmt:
             # A "<vid>+bestaudio" selector needs ffmpeg to merge. Without it,
             # fall back to the best single-file (progressive) format rather than
             # silently downloading video with no sound.
             if "+" in fmt and not has_ffmpeg:
                 return "best[vcodec!=none][acodec!=none]/best"
+            if small and fmt.endswith("+bestaudio"):
+                vid = fmt[: -len("+bestaudio")]
+                return f"{vid}+{capaud}/{fmt}"
             return fmt
         if height:
             if has_ffmpeg:
+                if small:
+                    return (
+                        f"bestvideo[height<={height}][vcodec^=av01]+{capaud}/"
+                        f"bestvideo[height<={height}][vcodec^=vp9]+{capaud}/"
+                        f"bestvideo[height<={height}][vcodec^=vp09]+{capaud}/"
+                        f"bestvideo[height<={height}]+{capaud}/"
+                        f"bestvideo[height<={height}]+bestaudio/best[height<={height}]/best"
+                    )
                 return f"bestvideo[height<={height}]+bestaudio/best[height<={height}]/best"
             return f"best[height<={height}][vcodec!=none][acodec!=none]/best[height<={height}]/best"
         if has_ffmpeg:
+            if small:
+                return (
+                    f"bestvideo[vcodec^=av01]+{capaud}/bestvideo[vcodec^=vp9]+{capaud}/"
+                    f"bestvideo[vcodec^=vp09]+{capaud}/bestvideo+{capaud}/"
+                    f"bestvideo+bestaudio/best"
+                )
             return "bestvideo+bestaudio/best"
         return "best[vcodec!=none][acodec!=none]/best"
 
