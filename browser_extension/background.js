@@ -40,6 +40,7 @@ const MEDIA_FILTER = {
     "*://*/*.m3u*",
     "*://*/*.mpd*",
     "*://*/*.mp4*",
+    "*://*/*.ts*",
     "*://*/*.m4v*",
     "*://*/*.webm*",
     "*://*/*.mov*",
@@ -55,7 +56,7 @@ const MEDIA_FILTER = {
   ],
 };
 
-const VIDEO_EXTS = ["mp4", "m4v", "webm", "mov", "mkv", "flv"];
+const VIDEO_EXTS = ["mp4", "m4v", "webm", "mov", "mkv", "flv", "ts"];
 const AUDIO_EXTS = ["mp3", "m4a", "aac", "ogg", "opus", "flac", "wav"];
 
 // Junk we must never offer as a "video": thumbnails, avatars, UI sounds, ads,
@@ -167,6 +168,7 @@ async function addMedia(tabId, url, meta = {}) {
   if (tabId < 0 || !/^https?:/i.test(url)) return;
   const info = classify(url);
   if (!info) return;
+  const ext = extOf(url);
 
   let media = tabMedia.get(tabId);
   if (!media) {
@@ -185,12 +187,23 @@ async function addMedia(tabId, url, meta = {}) {
   }
 
   const hasStream = [...media.values()].some((m) => m.kind === "hls" || m.kind === "dash");
+  const segDir = url.split("#")[0].split("?")[0].replace(/\/[^/]*$/, "/");
 
   if (info.kind === "hls" || info.kind === "dash") {
     // A manifest arrived — drop any progressive "files" already collected;
     // on a streaming page those were almost certainly fragments.
     for (const [k, v] of [...media.entries()]) {
       if (v.kind === "file") media.delete(k);
+    }
+  } else if (ext === "ts") {
+    // Raw MPEG-TS (.ts). When the tab already has a manifest, these are its
+    // fragments and the manifest is the better download — so skip them.
+    // Otherwise offer the stream ONCE: collapse every .ts that shares a folder
+    // into a single entry, so a site that exposes only .ts is downloadable
+    // without flooding the list with every segment.
+    if (hasStream) return;
+    for (const v of media.values()) {
+      if (v.ext === "ts" && v._segDir === segDir) return;
     }
   } else {
     // Progressive file. Skip obvious fragments, and skip entirely if this tab
@@ -210,12 +223,13 @@ async function addMedia(tabId, url, meta = {}) {
     url,
     kind: info.kind,
     mclass: info.mclass,
-    ext: extOf(url),
+    ext,
     size: meta.size || 0,
     contentType: meta.contentType || "",
-    name: guessTitleName(url, info.mclass),
+    name: ext === "ts" ? (title || "Video stream (.ts)") : guessTitleName(url, info.mclass),
     title: title || "",
     pageUrl: pageUrl || meta.pageUrl || "",
+    _segDir: ext === "ts" ? segDir : undefined,
     ts: Date.now(),
   });
   updateBadge(tabId);
