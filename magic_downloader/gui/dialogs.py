@@ -1450,6 +1450,9 @@ class AboutDialog(tk.Toplevel):
                 "%Y-%m-%d %H:%M", _time.localtime(updated_at))
         tk.Label(txt, text=ver_text, bg=T.BG_TOOLBAR, fg=T.FG_ON_DARK_MUTED,
                  font=T.FONT_UI, anchor="w").pack(anchor="w")
+        tk.Label(txt, text="Created by Bayoumi  ·  github.com/Bayoumi68",
+                 bg=T.BG_TOOLBAR, fg=T.FG_ON_DARK_MUTED, font=T.FONT_UI,
+                 anchor="w").pack(anchor="w", pady=(2, 0))
 
         body = tk.Frame(self, bg=T.BG, padx=18, pady=14)
         body.pack(fill=tk.BOTH, expand=True)

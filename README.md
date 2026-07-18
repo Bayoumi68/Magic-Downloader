@@ -149,3 +149,7 @@ Magic_downloader/
 - **AES-128** encrypted HLS needs the `cryptography` package (in `requirements.txt`). Unencrypted streams work without it.
 - Keep yt-dlp current with `pip install -U yt-dlp` — sites change and yt-dlp ships fixes frequently.
 - This is an educational / personal tool inspired by classic download managers. Only download content you have the right to.
+
+## Author
+
+Created by **[Bayoumi](https://github.com/Bayoumi68)** — designed, built, and maintained by me. If Magic Downloader is useful to you, a ⭐ on the repo is appreciated.
