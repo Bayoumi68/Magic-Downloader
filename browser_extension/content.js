@@ -232,6 +232,9 @@
 
     makeDraggable(fab);
     restoreFabPos();
+    // If the always-on floating button is off, start hidden — updateFab() will
+    // reveal it whenever the page actually has something to download.
+    if (cfg.showFloatingButton === false) fab.style.setProperty("display", "none", "important");
   }
 
   function clampFab(left, top) {
@@ -367,6 +370,13 @@
     } else {
       badge.style.display = "none";
     }
+    // Always surface the button when there's something to grab — even if the
+    // always-on floating button is turned off. This is the ONLY on-page control
+    // when the media was sniffed from the network, or the player sits in an
+    // iframe / uses a blob(MSE) src, so no per-<video> overlay could be placed.
+    const show = cfg.showFloatingButton !== false || count > 0;
+    if (show) fab.style.removeProperty("display");
+    else fab.style.setProperty("display", "none", "important");
   }
 
   // ── per-<video> overlay button ────────────────────────────────────────
@@ -551,7 +561,8 @@
     document.documentElement.appendChild(cfgHost);
 
     buildPanel(cfgHost);
-    if (cfg.showFloatingButton !== false) buildFab(cfgHost); // optional
+    buildFab(cfgHost); // always built; hidden until there's a download when the toggle is off
+    updateFab();       // set its initial visibility right away
 
     document.addEventListener("click", (e) => {
       const root = document.getElementById(ROOT_ID);
