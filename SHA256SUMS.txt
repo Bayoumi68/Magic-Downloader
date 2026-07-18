@@ -1,3 +1,2 @@
 9a1bf613d9d0df5eaf808040a2bbe3f974bbf3790ee843c9847874cd98d4d41b  MagicDownloader-Setup.exe
-b8b99c26f79d8ff9be66c2803a963cf037abcdfdeb03f326c897e8d9b6734e96  MagicDownloader-win64.zip
 8ba233c094cf4499045c77f77434a0d3cb53630e21237fd92a9fc4f845ac93b5  MagicDownloader-Setup.zip

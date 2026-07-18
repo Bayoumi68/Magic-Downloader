@@ -12,11 +12,9 @@ A **fast, multi-connection** download manager for Windows, with a **real browser
 
 **[Get the latest release →](https://github.com/Bayoumi68/Magic-Downloader/releases/latest)**
 
-_These links always point to the newest version (the filenames never change):_
+_This link always points to the newest version (the filename never changes):_
 
-- **Installer** (recommended): [`MagicDownloader-Setup.exe`](https://github.com/Bayoumi68/Magic-Downloader/releases/latest/download/MagicDownloader-Setup.exe) — Start-menu shortcut + uninstaller, installs per-user (no admin).
-- **Installer, zipped** (use this if your browser/antivirus blocks or renames the `.exe`): [`MagicDownloader-Setup.zip`](https://github.com/Bayoumi68/Magic-Downloader/releases/latest/download/MagicDownloader-Setup.zip) — unzip, then run the installer inside.
-- **Portable** (no install): [`MagicDownloader-win64.zip`](https://github.com/Bayoumi68/Magic-Downloader/releases/latest/download/MagicDownloader-win64.zip) — unzip and run `MagicDownloader.exe`.
+- **Installer** (zipped): [`MagicDownloader-Setup.zip`](https://github.com/Bayoumi68/Magic-Downloader/releases/latest/download/MagicDownloader-Setup.zip) — unzip, then run the installer inside. Adds a Start-menu shortcut + uninstaller and installs per-user (no admin). It's zipped so your browser or antivirus won't block or rename it — works on all Windows versions.
 
 > **Why the “harmful / unknown publisher” warning?** The app is **not code-signed** (a signing certificate costs money), so Windows SmartScreen and some antivirus flag it as *unrecognized* — not because anything is actually wrong. It's open-source; you can build it yourself. Verify your download against [`SHA256SUMS.txt`](https://github.com/Bayoumi68/Magic-Downloader/releases/latest/download/SHA256SUMS.txt) (`Get-FileHash file -Algorithm SHA256`).
 >
