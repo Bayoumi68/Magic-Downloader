@@ -33,6 +33,7 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     # Video / ffmpeg
     "ffmpeg_path": "",         # explicit ffmpeg path; empty = auto-detect
     "default_video_quality": "best",  # best | ask | 2160 | 1440 | 1080 | 720 | 480 | 360 | audio
+    "stream_output_ts": False,  # save HLS/DASH video as a raw .ts stream instead of a merged .mp4 (needs ffmpeg)
     # UX
     "confirm_delete": True,
     # Download-list columns to show (right-click the list header to choose).

@@ -1004,6 +1004,14 @@ class SettingsDialog(tk.Toplevel):
         self.install_btn.grid(row=6, column=0, columnspan=2, sticky="w", pady=8)
         self.install_status = tk.Label(f, text="", bg=T.BG, fg=T.FG_MUTED, font=T.FONT_SMALL, anchor="w")
         self.install_status.grid(row=7, column=0, columnspan=3, sticky="w")
+
+        sep2 = tk.Frame(f, bg=T.BORDER, height=1)
+        sep2.grid(row=8, column=0, columnspan=3, sticky="ew", pady=12)
+        self.ts_out_var = tk.BooleanVar(value=bool(self.settings.get("stream_output_ts", False)))
+        ttk.Checkbutton(f, text="Save streamed video as raw .ts (instead of a merged .mp4)",
+                        variable=self.ts_out_var).grid(row=9, column=0, columnspan=3, sticky="w")
+        self._hint(f, 10, "Off = clean, seekable .mp4 (recommended). On = one MPEG-TS file, like "
+                          "classic download managers. Needs ffmpeg; applies to HLS/DASH video.")
         self._refresh_ffmpeg_status()
 
     def _refresh_ffmpeg_status(self) -> None:
@@ -1138,6 +1146,7 @@ class SettingsDialog(tk.Toplevel):
             (val for lbl, val in QUALITY_CHOICES if lbl == self.quality_var.get()), "best"
         )
         self.settings["ffmpeg_path"] = self.ffmpeg_var.get().strip()
+        self.settings["stream_output_ts"] = bool(self.ts_out_var.get())
 
         self.settings["browser_integration"] = bool(self.browser_on.get())
         self.settings["confirm_browser_captures"] = bool(self.confirm_captures.get())

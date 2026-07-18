@@ -150,6 +150,33 @@ def mux_to_mp4(
             raise RuntimeError(f"ffmpeg mux failed: {err}")
 
 
+def mux_to_ts(
+    inputs: list[str | os.PathLike[str]],
+    output: str | os.PathLike[str],
+    *,
+    copy: bool = True,
+) -> None:
+    """Combine inputs into a single MPEG-TS (``.ts``) file.
+
+    MPEG-TS is the raw, concatenation-friendly stream container classic download
+    managers save. Stream-copy by default (no re-encode). Raises RuntimeError on
+    failure or if ffmpeg is unavailable.
+    """
+    ff = find_ffmpeg()
+    if not ff:
+        raise RuntimeError("ffmpeg not found")
+    args: list[str] = [ff, "-y", "-hide_banner", "-loglevel", "error"]
+    for inp in inputs:
+        args += ["-i", str(inp)]
+    if copy:
+        args += ["-c", "copy"]
+    args += ["-f", "mpegts", str(output)]
+    proc = _run(args)
+    if proc.returncode != 0:
+        err = (proc.stderr or b"").decode("utf-8", "replace")[-500:]
+        raise RuntimeError(f"ffmpeg ts mux failed: {err}")
+
+
 def concat_via_demuxer(
     segment_paths: list[str | os.PathLike[str]],
     output: str | os.PathLike[str],

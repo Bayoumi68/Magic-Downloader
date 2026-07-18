@@ -451,15 +451,31 @@ class MediaDownloadEngine:
     def _concat_target(self, track: _Track, track_dir: Path) -> Path:
         return track_dir / f"track{track.ext}"
 
+    def _want_ts_output(self) -> bool:
+        """User asked to save streams as raw .ts (classic-DM style) not .mp4."""
+        try:
+            from magic_downloader import config
+            return bool(config.load_settings().get("stream_output_ts", False))
+        except Exception:  # noqa: BLE001 — a bad settings file must not break a download
+            return False
+
     def _assemble(self, tracks: list[_Track]) -> None:
         final = Path(self.job.save_path)
         final.parent.mkdir(parents=True, exist_ok=True)
-        if final.suffix.lower() not in (".mp4", ".m4a", ".mkv", ".webm", ".ts"):
-            final = final.with_suffix(".mp4")
-            self.job.save_path = str(final)
-            self.job.filename = final.name
 
         has_ff = ffmpeg.has_ffmpeg()
+        has_video = any(t.kind == "video" for t in tracks)
+        # Raw-.ts output is opt-in and only meaningful for (remuxable) video.
+        want_ts = has_ff and has_video and self._want_ts_output()
+
+        if want_ts:
+            if final.suffix.lower() != ".ts":
+                final = final.with_suffix(".ts")
+        elif final.suffix.lower() not in (".mp4", ".m4a", ".mkv", ".webm", ".ts"):
+            final = final.with_suffix(".mp4")
+        if str(final) != self.job.save_path:
+            self.job.save_path = str(final)
+            self.job.filename = final.name
 
         # Build each track's concatenated file.
         for track in tracks:
@@ -469,7 +485,7 @@ class MediaDownloadEngine:
         audio = next((t for t in tracks if t.kind == "audio"), None)
 
         if has_ff:
-            self._assemble_ffmpeg(final, video, audio)
+            self._assemble_ffmpeg(final, video, audio, as_ts=want_ts)
         else:
             self._assemble_fallback(final, video, audio, tracks)
 
@@ -493,7 +509,8 @@ class MediaDownloadEngine:
                             break
                         out.write(buf)
 
-    def _assemble_ffmpeg(self, final: Path, video: _Track | None, audio: _Track | None) -> None:
+    def _assemble_ffmpeg(self, final: Path, video: _Track | None, audio: _Track | None,
+                         *, as_ts: bool = False) -> None:
         inputs: list[str] = []
         if video and video.out_path:
             inputs.append(str(video.out_path))
@@ -502,7 +519,10 @@ class MediaDownloadEngine:
         if not inputs:
             raise MediaProcessingError("Nothing to assemble")
         try:
-            ffmpeg.mux_to_mp4(inputs, final, copy=True)
+            if as_ts:
+                ffmpeg.mux_to_ts(inputs, final, copy=True)
+            else:
+                ffmpeg.mux_to_mp4(inputs, final, copy=True)
         except RuntimeError as exc:
             raise MediaProcessingError(f"ffmpeg failed: {exc}") from exc
 
