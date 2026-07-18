@@ -2,8 +2,13 @@
 
 The app publishes every release with version-less asset names, so the "latest"
 download URLs never change. We ask the GitHub API for the newest tag, compare it
-to the running version, and can fetch + verify the installer against the
-published SHA256SUMS.txt before handing it to Windows to run.
+to the running version, and can fetch + verify the installer before handing it
+to Windows to run.
+
+The installer is distributed **zipped** (``MagicDownloader-Setup.zip``) — a bare
+``.exe`` is often blocked or renamed by browsers/antivirus, and it's the only
+download the project ships. So we download the zip, verify it against the
+published SHA-256, extract the installer ``.exe`` from it, and run that.
 """
 
 from __future__ import annotations
@@ -12,6 +17,7 @@ import hashlib
 import re
 import subprocess
 import sys
+import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
@@ -25,7 +31,8 @@ REPO = "Bayoumi68/Magic-Downloader"
 API_LATEST = f"https://api.github.com/repos/{REPO}/releases/latest"
 RELEASES_PAGE = f"https://github.com/{REPO}/releases/latest"
 DL_BASE = f"https://github.com/{REPO}/releases/latest/download"
-INSTALLER_NAME = "MagicDownloader-Setup.exe"
+INSTALLER_ZIP = "MagicDownloader-Setup.zip"   # what we download (browser/AV-safe)
+INSTALLER_EXE = "MagicDownloader-Setup.exe"   # the installer inside the zip, run after extract
 SUMS_NAME = "SHA256SUMS.txt"
 TIMEOUT = 20
 
@@ -68,18 +75,18 @@ def check_latest(timeout: int = TIMEOUT) -> Release:
         version=tag.lstrip("vV"),
         tag=tag,
         notes=str(data.get("body") or "").strip(),
-        url=f"{DL_BASE}/{INSTALLER_NAME}",
+        url=f"{DL_BASE}/{INSTALLER_ZIP}",
     )
 
 
-def _published_sha256(timeout: int = TIMEOUT) -> str | None:
-    """The installer's hash from the release's SHA256SUMS.txt (None if absent)."""
+def _published_sha256(name: str = INSTALLER_ZIP, timeout: int = TIMEOUT) -> str | None:
+    """The hash of *name* from the release's SHA256SUMS.txt (None if absent)."""
     try:
         r = requests.get(f"{DL_BASE}/{SUMS_NAME}", timeout=timeout)
         r.raise_for_status()
         for line in r.text.splitlines():
             parts = line.split()
-            if len(parts) >= 2 and parts[-1] == INSTALLER_NAME:
+            if len(parts) >= 2 and parts[-1] == name:
                 return parts[0].strip().lower()
     except Exception:  # noqa: BLE001 — checksum is best-effort
         return None
@@ -94,23 +101,42 @@ def _file_sha256(path: Path) -> str:
     return digest.hexdigest().lower()
 
 
+def _extract_installer(zip_path: Path, dest_dir: Path) -> Path:
+    """Pull the installer .exe out of the downloaded setup zip.
+
+    Returns the path to the extracted ``MagicDownloader-Setup.exe``. Raises
+    ValueError if the zip holds no .exe.
+    """
+    with zipfile.ZipFile(zip_path) as zf:
+        members = [n for n in zf.namelist() if n.lower().endswith(".exe")]
+        if not members:
+            raise ValueError("The setup zip didn't contain an installer .exe.")
+        member = members[0]
+        zf.extract(member, dest_dir)
+    extracted = dest_dir / member
+    dest = dest_dir / INSTALLER_EXE
+    if extracted.resolve() != dest.resolve():
+        extracted.replace(dest)
+    return dest
+
+
 def cached_installer(timeout: int = TIMEOUT) -> Path | None:
     """An already-downloaded installer for the *current* latest release.
 
-    Returned only when its SHA-256 still matches the published one, which makes
-    this both an identity check (it's the release we're about to install) and an
-    integrity check. Lets a decline survive a restart without re-fetching ~28 MB.
-    Returns None if there's nothing usable.
+    Returned only when the cached setup zip's SHA-256 still matches the published
+    one, which makes this both an identity check (it's the release we're about to
+    install) and an integrity check. Lets a decline survive a restart without
+    re-fetching. Returns None if there's nothing usable.
     """
-    dest = DATA_ROOT / "updates" / INSTALLER_NAME
-    if not dest.exists():
+    zip_dest = DATA_ROOT / "updates" / INSTALLER_ZIP
+    if not zip_dest.exists():
         return None
     try:
         expected = _published_sha256(timeout=timeout)
-        if not expected:
+        if not expected or _file_sha256(zip_dest) != expected:
             return None                       # can't prove what it is
-        return dest if _file_sha256(dest) == expected else None
-    except OSError:
+        return _extract_installer(zip_dest, zip_dest.parent)
+    except (OSError, ValueError, zipfile.BadZipFile):
         return None
 
 
@@ -123,17 +149,17 @@ def download_installer(
     timeout: int = TIMEOUT,
     cancel_check: Callable[[], bool] | None = None,
 ) -> Path:
-    """Download the latest installer and verify it against the published
-    SHA-256. Returns the file path. Raises on network/checksum failure, or
-    DownloadCancelled if *cancel_check* starts returning True."""
+    """Download the latest setup zip, verify it against the published SHA-256,
+    extract the installer .exe, and return its path. Raises on network/checksum
+    failure, or DownloadCancelled if *cancel_check* starts returning True."""
     dest_dir = DATA_ROOT / "updates"
     dest_dir.mkdir(parents=True, exist_ok=True)
-    dest = dest_dir / INSTALLER_NAME
-    tmp = dest_dir / (INSTALLER_NAME + ".part")
+    zip_dest = dest_dir / INSTALLER_ZIP
+    tmp = dest_dir / (INSTALLER_ZIP + ".part")
 
     digest = hashlib.sha256()
     done = 0
-    with requests.get(f"{DL_BASE}/{INSTALLER_NAME}", stream=True, timeout=timeout) as r:
+    with requests.get(f"{DL_BASE}/{INSTALLER_ZIP}", stream=True, timeout=timeout) as r:
         r.raise_for_status()
         total = int(r.headers.get("Content-Length") or 0)
         with open(tmp, "wb") as f:
@@ -157,8 +183,8 @@ def download_installer(
             "The downloaded installer didn't match its published checksum — "
             "download aborted."
         )
-    tmp.replace(dest)
-    return dest
+    tmp.replace(zip_dest)
+    return _extract_installer(zip_dest, dest_dir)
 
 
 def run_installer(path: Path) -> None:
