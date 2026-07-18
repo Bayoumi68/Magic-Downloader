@@ -99,8 +99,8 @@ class MagicDownloaderApp(tk.Tk):
         self._record_version()         # stamp "updated at" on a new version
         self._build_menu()
         self._build_toolbar()
+        self._build_statusbar()   # reserve the bottom bar BEFORE the expanding body
         self._build_body()
-        self._build_statusbar()
         self._apply_style()
         self._start_browser_server()
         self._setup_tray()

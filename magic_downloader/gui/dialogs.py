@@ -34,6 +34,23 @@ def _center(win: tk.Toplevel) -> None:
     win.geometry(f"+{(sw - w) // 2}+{(sh - h) // 2}")
 
 
+def _fit_center(win: tk.Toplevel, min_w: int = 0, min_h: int = 0) -> None:
+    """Size *win* to fit its content, then center it.
+
+    Uses the content's requested size, so the window is never too short to show
+    its buttons — regardless of display DPI/font scaling (which is what made the
+    fixed pixel geometries clip). Never smaller than (min_w, min_h) — the
+    designed size acts as a floor — and never larger than the screen.
+    """
+    win.update_idletasks()
+    w = max(min_w, win.winfo_reqwidth())
+    h = max(min_h, win.winfo_reqheight())
+    sw, sh = win.winfo_screenwidth(), win.winfo_screenheight()
+    w = min(w, sw - 60)
+    h = min(h, sh - 100)
+    win.geometry(f"{w}x{h}+{max(0, (sw - w) // 2)}+{max(0, (sh - h) // 2)}")
+
+
 def _dedupe_name(folder: Path, name: str) -> str:
     """Return a non-colliding file name in *folder* by appending (1), (2), …"""
     p = folder / name
@@ -201,7 +218,7 @@ class AddDownloadDialog(tk.Toplevel):
         self.url_var.trace_add("write", self._on_url_change)
         self.bind("<Return>", lambda e: self._submit())
         self.bind("<Escape>", lambda e: self.destroy())
-        _center(self)
+        _fit_center(self, 620, 380)
 
     def _on_url_change(self, *_args: object) -> None:
         url = self.url_var.get().strip()
@@ -368,7 +385,7 @@ class AddVideoDialog(tk.Toplevel):
         self.dl_btn = ttk.Button(btns, text=f"  {submit_label}  ", command=self._submit)
         self.dl_btn.pack(side=tk.RIGHT, padx=4)
 
-        _center(self)
+        _fit_center(self, 680, 480)
         if initial_url:
             self.after(150, self._fetch)
 
@@ -598,7 +615,7 @@ class CaptureDialog(tk.Toplevel):
         self.bind("<Return>", lambda e: self._finish(True))
         self.bind("<Escape>", lambda e: self._cancel())
         self.protocol("WM_DELETE_WINDOW", self._cancel)
-        _center(self)
+        _fit_center(self, 560, 360)
 
     def _on_category(self) -> None:
         cat = self.cat_var.get()
@@ -710,6 +727,13 @@ class SettingsDialog(tk.Toplevel):
             font=T.FONT_TITLE, anchor="w",
         ).pack(fill=tk.BOTH, expand=True, padx=12)
 
+        # Reserve the button bar at the BOTTOM first so a tall notebook tab can
+        # never clip it — the notebook then fills the space above it.
+        btns = tk.Frame(self, bg=T.BG)
+        btns.pack(fill=tk.X, side=tk.BOTTOM, padx=12, pady=10)
+        ttk.Button(btns, text="Cancel", command=self.destroy).pack(side=tk.RIGHT, padx=4)
+        ttk.Button(btns, text="Save", command=self._save).pack(side=tk.RIGHT, padx=4)
+
         nb = ttk.Notebook(self)
         nb.pack(fill=tk.BOTH, expand=True, padx=10, pady=(10, 0))
         self._build_general(nb)
@@ -718,11 +742,7 @@ class SettingsDialog(tk.Toplevel):
         self._build_video(nb)
         self._build_browser(nb)
 
-        btns = tk.Frame(self, bg=T.BG)
-        btns.pack(fill=tk.X, padx=12, pady=10)
-        ttk.Button(btns, text="Cancel", command=self.destroy).pack(side=tk.RIGHT, padx=4)
-        ttk.Button(btns, text="Save", command=self._save).pack(side=tk.RIGHT, padx=4)
-        _center(self)
+        _fit_center(self, 620, 560)
 
     # ── helpers ─────────────────────────────────────────────────────────
     def _tab(self, nb: ttk.Notebook, title: str) -> tk.Frame:
@@ -1282,7 +1302,7 @@ class DownloadProgressDialog(tk.Toplevel):
         self.folder_btn.pack(side=tk.RIGHT, padx=4)
 
         self.protocol("WM_DELETE_WINDOW", self._hide)
-        _center(self)
+        _fit_center(self, 580, 350)
         self.update_view()
 
     def _remember_close_pref(self) -> None:
@@ -1503,7 +1523,7 @@ class AboutDialog(tk.Toplevel):
         self.check_btn = ttk.Button(btns, text="Check for updates", command=self._do_check)
         self.check_btn.pack(side=tk.RIGHT, padx=4)
 
-        _center(self)
+        _fit_center(self, 460, 360)
         self.grab_set()
         if auto_check:
             self.after(200, self._do_check)
