@@ -590,6 +590,15 @@ class DownloadManager:
             job = self.get_job(job_id)
             if not job:
                 return
+            # Always drop the media engine's segment scratch folder — it is
+            # internal temp (can be many GB for a stream) and is useless once the
+            # job leaves the list. Pattern must match MediaDownloadEngine._tmp_dir.
+            try:
+                tmp = Path(job.save_path + f".mdtmp-{job.id}")
+                if tmp.exists():
+                    shutil.rmtree(tmp, ignore_errors=True)
+            except OSError:
+                pass
             if delete_files:
                 for p in (job.save_path, job.save_path + ".part"):
                     try:

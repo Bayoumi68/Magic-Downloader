@@ -142,6 +142,8 @@ class MediaDownloadEngine:
 
     # ── main flow ───────────────────────────────────────────────────────
     def run(self) -> None:
+        tmp_dir: Path | None = None
+        assembling = False   # True once every segment is downloaded
         try:
             self.job.status = DownloadStatus.CONNECTING
             self.job.error = ""
@@ -185,6 +187,7 @@ class MediaDownloadEngine:
             self.job.status = DownloadStatus.PROCESSING
             self.job.speed_bps = 0.0
             self._emit()
+            assembling = True   # all segments are on disk now
             self._assemble(tracks)
 
             self.job.status = DownloadStatus.COMPLETE
@@ -200,6 +203,12 @@ class MediaDownloadEngine:
             self.job.status = DownloadStatus.FAILED
             self.job.error = str(exc)
             self.job.speed_bps = 0.0
+            # If the failure happened during assembly, every segment was already
+            # downloaded — don't leave a huge temp folder behind (re-downloading
+            # won't fix a mux error). Mid-download failures keep it so a retry
+            # can resume from the segments already fetched.
+            if assembling and tmp_dir is not None:
+                self._cleanup(tmp_dir)
             self._emit()
 
     # ── planning ────────────────────────────────────────────────────────
@@ -520,7 +529,21 @@ class MediaDownloadEngine:
             raise MediaProcessingError("Nothing to assemble")
         try:
             if as_ts:
-                ffmpeg.mux_to_ts(inputs, final, copy=True)
+                try:
+                    ffmpeg.mux_to_ts(inputs, final, copy=True)
+                except RuntimeError:
+                    # MPEG-TS can't carry every codec — VP9/AV1 video and Opus
+                    # audio all fail. Don't throw away a fully-downloaded stream:
+                    # fall back to a merged .mp4 so the download still succeeds.
+                    mp4 = final.with_suffix(".mp4")
+                    ffmpeg.mux_to_mp4(inputs, mp4, copy=True)
+                    if mp4 != final:
+                        try:
+                            final.unlink(missing_ok=True)   # drop the empty .ts
+                        except OSError:
+                            pass
+                        self.job.save_path = str(mp4)
+                        self.job.filename = mp4.name
             else:
                 ffmpeg.mux_to_mp4(inputs, final, copy=True)
         except RuntimeError as exc:
