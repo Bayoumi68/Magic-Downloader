@@ -499,7 +499,14 @@ class MediaDownloadEngine:
             self._assemble_fallback(final, video, audio, tracks)
 
     def _concat_track(self, track: _Track) -> None:
-        """Byte-concatenate a track's segments (+ init) into track.out_path."""
+        """Byte-concatenate a track's segments (+ init) into track.out_path,
+        deleting each segment as soon as it's folded in.
+
+        Freeing segments on the fly keeps peak temp usage at ~1x the video (the
+        growing track file) instead of ~2x (all segments PLUS the assembled copy
+        at once). A crash mid-assemble is rare and self-heals — the temp folder
+        is cleaned on failure and a retry re-fetches only what's missing.
+        """
         track_dir = track.out_path.parent
         parts: list[Path] = []
         init_path = getattr(track, "_init_path", None)
@@ -517,6 +524,11 @@ class MediaDownloadEngine:
                         if not buf:
                             break
                         out.write(buf)
+                if p != track.out_path:
+                    try:
+                        p.unlink()          # reclaim the segment immediately
+                    except OSError:
+                        pass
 
     def _assemble_ffmpeg(self, final: Path, video: _Track | None, audio: _Track | None,
                          *, as_ts: bool = False) -> None:
