@@ -121,9 +121,9 @@
   }
 
   function mediaLabel(item) {
-    if (item.kind === "page") return "This page's video · pick quality in the popup";
-    if (item.kind === "hls") return "HLS stream (adaptive quality)";
-    if (item.kind === "dash") return "DASH stream (adaptive quality)";
+    if (item.kind === "page") return "This page's video";
+    if (item.kind === "hls") return "HLS stream";
+    if (item.kind === "dash") return "DASH stream";
     const size = item.size ? ` · ${humanSize(item.size)}` : "";
     return `${item.ext ? item.ext.toUpperCase() : "FILE"}${size}`;
   }
@@ -164,40 +164,121 @@
   }
 
   function renderItem(item) {
-    const row = document.createElement("div");
-    row.className = "md-item";
     const kind = item.kind === "file" ? "file" : item.kind;
-    const displayName = item.title || item.name || guessName(item.url);
-    row.innerHTML = `
+    const name = item.title || item.name || guessName(item.url);
+    const isPage = item.kind === "page";
+    const isStream = item.kind === "hls" || item.kind === "dash";
+    const hasPicker = isPage || isStream;   // page/HLS/DASH → list every quality
+
+    const block = document.createElement("div");
+    block.className = "md-item-block";
+
+    const head = document.createElement("div");
+    head.className = "md-item";
+    head.innerHTML = `
       <span class="md-kind ${kind}">${(item.kind || "file").toUpperCase()}</span>
       <div class="md-meta">
-        <div class="md-name" title="${escapeHtml(item.url)}">${escapeHtml(displayName)}</div>
+        <div class="md-name" title="${escapeHtml(item.url)}">${escapeHtml(name)}</div>
         <div class="md-sub">${escapeHtml(mediaLabel(item))}</div>
       </div>
-      <button class="md-get" type="button">Download</button>
+      ${hasPicker ? "" : '<button class="md-get" type="button">Download</button>'}
     `;
-    const btn = row.querySelector(".md-get");
-    btn.addEventListener("click", async (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      btn.textContent = "…";
-      btn.disabled = true;
-      const res = await downloadMedia(item);
-      btn.textContent = res && res.ok ? "Queued ✓" : "Failed";
-      const st = panel.querySelector("#md-status");
+    block.appendChild(head);
+
+    // Plain file: one Download button, no quality list.
+    if (!hasPicker) {
+      head.querySelector(".md-get").addEventListener(
+        "click", (e) => doDownload(item, {}, e.currentTarget, name));
+      return block;
+    }
+
+    // Page / stream: probe the app for every quality and list them, exactly like
+    // the toolbar popup — so the on-video button no longer punts to the popup.
+    const list = document.createElement("div");
+    list.className = "md-formats";
+    list.innerHTML = '<div class="md-floading">Loading qualities…</div>';
+    block.appendChild(list);
+
+    msg({
+      type: "probeMedia",
+      url: item.url,
+      opts: { media_type: isPage ? "page" : item.kind, pageUrl: item.pageUrl || location.href },
+    }).then((res) => {
+      list.innerHTML = "";
+      let formats = [];
+      if (isPage) {
+        formats = (res && res.formats) || [];
+        const sub = head.querySelector(".md-sub");
+        if (res && res.extractor && sub) sub.textContent = `${res.extractor} · ${formats.length} formats`;
+      } else {
+        formats = ((res && res.variants) || [])
+          .filter((v) => v.height)
+          .map((v) => ({
+            label: v.label || `${v.height}p`,
+            height: v.height,
+            ext: v.ext || "mp4",
+            filesize: v.filesize || 0,
+            approx: v.approx,
+          }));
+      }
+      list.appendChild(fmtRow(item, { best: true }, name));   // always a one-click Best
+      for (const f of formats) list.appendChild(fmtRow(item, f, name));
+      if (!formats.length && res && res.ok === false) {
+        const w = document.createElement("div");
+        w.className = "md-floading";
+        w.textContent = `Couldn't list qualities: ${String((res && res.error) || "").slice(0, 55)} — “Best” still works.`;
+        list.appendChild(w);
+      }
+    });
+    return block;
+  }
+
+  function fmtRow(item, f, name) {
+    const row = document.createElement("div");
+    row.className = "md-fmt";
+    const q = f.best ? "⭐ Best" : (f.label || (f.height ? `${f.height}p` : "format"));
+    const ext = f.best ? "" : (f.ext ? f.ext.toUpperCase() : "");
+    const size = f.filesize ? (f.approx ? "~" : "") + humanSize(f.filesize) : "";
+    let meta = [ext, size].filter(Boolean).join(" · ");
+    if (f.needs_ffmpeg) meta += ` <span class="md-ff">⚙ needs ffmpeg</span>`;
+    else if (f.audio_only) meta += ` <span class="md-fa">🎵 audio</span>`;
+    else if (f.best) meta = "highest quality available";
+    row.innerHTML = `
+      <span class="md-fq">${escapeHtml(q)}</span>
+      <span class="md-fmeta">${meta}</span>
+      <button class="md-fdl" type="button" title="Download this quality">⬇</button>
+    `;
+    let sel = {};
+    if (!f.best) {
+      if (f.audio_only) sel = { audio_only: true, format_id: f.format_id };
+      else if (f.format_id) sel = { format_id: f.format_id };
+      else if (f.height) sel = { height: f.height };
+    }
+    row.querySelector(".md-fdl").addEventListener(
+      "click", (e) => doDownload(item, sel, e.currentTarget, name));
+    return row;
+  }
+
+  async function doDownload(item, sel, btn, name) {
+    const old = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = "…";
+    const res = await downloadMedia(item, sel);
+    btn.textContent = res && res.ok ? "✓" : "✗";
+    const st = panel && panel.querySelector("#md-status");
+    if (st) {
       if (res && res.ok) {
-        st.textContent = `Queued: ${res.filename || displayName}`;
+        st.textContent = `Queued: ${res.filename || name}`;
         st.className = "md-status ok";
       } else {
         st.textContent = `Failed: ${(res && res.error) || "is the app running?"}`;
         st.className = "md-status bad";
       }
-      setTimeout(() => {
-        btn.textContent = "Download";
-        btn.disabled = false;
-      }, 1800);
-    });
-    return row;
+    }
+    setTimeout(() => {
+      btn.textContent = old;
+      btn.disabled = false;
+    }, 1600);
   }
 
   function escapeHtml(s) {
@@ -417,9 +498,16 @@
         overlaySuppressClick = false;
         return; // was the end of a drag
       }
+      // Blob/MSE players expose no real URL, so seed the page item — the panel
+      // then probes it and lists every quality (same as the toolbar popup).
       const direct = videoDirectItem(video);
+      const fallback = direct || {
+        url: location.href, kind: "page", mclass: "video",
+        name: document.title || "This page's video",
+        title: document.title || "", pageUrl: location.href, size: 0,
+      };
       openPanel();
-      renderList(direct ? [direct] : []);
+      renderList([fallback]);
     });
     makeVideoBtnDraggable(btn);
     videoOverlays.set(video, btn);

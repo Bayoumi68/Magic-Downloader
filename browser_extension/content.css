@@ -163,3 +163,46 @@
   cursor: pointer !important;
 }
 .md-item button.md-get:hover { background: #1e3f73 !important; }
+
+/* quality picker (page / HLS / DASH) — mirrors the toolbar popup */
+.md-item-block { border-top: 1px solid #eef2f6 !important; }
+.md-item-block .md-item { border-top: none !important; }
+.md-formats {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 4px !important;
+  padding: 2px 6px 8px 6px !important;
+  max-height: 230px !important;
+  overflow-y: auto !important;
+}
+.md-floading { font-size: 11px !important; color: #6b7a89 !important; padding: 4px 2px !important; }
+.md-fmt {
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  padding: 5px 6px !important;
+  border-radius: 6px !important;
+  background: #f4f7fb !important;
+}
+.md-fq { font-size: 12px !important; font-weight: 700 !important; color: #22303c !important; flex: 0 0 auto !important; }
+.md-fmeta {
+  font-size: 11px !important; color: #6b7a89 !important;
+  flex: 1 1 auto !important; min-width: 0 !important;
+  white-space: nowrap !important; overflow: hidden !important; text-overflow: ellipsis !important;
+}
+.md-fmeta .md-ff { color: #b8860b !important; }
+.md-fmeta .md-fa { color: #2b579a !important; }
+.md-fdl {
+  flex: 0 0 auto !important;
+  padding: 4px 11px !important;
+  border: none !important;
+  border-radius: 6px !important;
+  background: #2b579a !important;
+  color: #fff !important;
+  font-size: 13px !important;
+  font-weight: 700 !important;
+  line-height: 1 !important;
+  cursor: pointer !important;
+}
+.md-fdl:hover { background: #1e3f73 !important; }
+.md-fdl:disabled { opacity: 0.6 !important; cursor: default !important; }
