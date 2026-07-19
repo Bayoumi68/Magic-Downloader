@@ -1523,7 +1523,11 @@ class AboutDialog(tk.Toplevel):
         self.check_btn = ttk.Button(btns, text="Check for updates", command=self._do_check)
         self.check_btn.pack(side=tk.RIGHT, padx=4)
 
-        _fit_center(self, 460, 360)
+        # NOTE: do NOT pin the size here with _fit_center — this dialog grows
+        # after a check (it packs release notes + the "Install now" button), and
+        # an explicit geometry turns off auto-fit, clipping that button. _center
+        # only positions it, so it keeps auto-sizing to its content.
+        _center(self)
         self.grab_set()
         if auto_check:
             self.after(200, self._do_check)
@@ -1570,6 +1574,19 @@ class AboutDialog(tk.Toplevel):
                 first = "\n".join(rel.notes.splitlines()[:6])
                 self.notes.configure(text=first)
                 self.notes.pack(fill=tk.X, pady=(6, 0))
+            # A previous "not now" leaves the verified installer on disk. If our
+            # in-memory pointer was lost (e.g. the app was restarted since), find
+            # it in the cache so we install it instead of re-downloading ~28 MB.
+            if not self._ready_for(rel.version):
+                try:
+                    from magic_downloader import updater
+                    cached = updater.cached_installer()
+                    if cached is not None:
+                        self._ready, self._ready_version = str(cached), rel.version
+                        if self.on_update_ready:
+                            self.on_update_ready(rel.version, str(cached))
+                except Exception:  # noqa: BLE001 — best-effort cache recovery
+                    pass
             # Already fetched (automatic check, or a previous "not now") — say
             # so, and let the button install it rather than re-downloading.
             if self._ready_for(rel.version):
