@@ -230,7 +230,7 @@ function fmtRow(item, f, name) {
     <span class="fmeta">${meta}</span>
     <button class="fdl" type="button" title="Download this format">⬇</button>
   `;
-  let sel = {};
+  let sel = f.best ? { best: true } : {};   // mark ⭐ Best as an explicit choice
   if (!f.best) {
     if (f.audio_only) sel = { audio_only: true, format_id: f.format_id };
     else if (f.format_id) sel = { format_id: f.format_id };

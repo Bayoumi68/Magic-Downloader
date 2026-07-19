@@ -1,1 +1,1 @@
-cd8e687b9759291dcdeec002c9f7061cd981c6de3b3ca01526e48990d512b46f  MagicDownloader-Setup.zip
+bd20dca0a406c46eed5b777ebd11bf7b04238ec5d38e59b34b6d0d5120f9993b  MagicDownloader-Setup.zip

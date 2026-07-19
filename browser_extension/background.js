@@ -486,6 +486,7 @@ async function downloadMedia(item, sel, tabId) {
     if (sel.format_id) opts.format_id = sel.format_id;
     if (sel.height) opts.height = sel.height;
     if (sel.audio_only) opts.audio_only = true;
+    if (sel.best) opts.best = true;   // explicit ⭐ Best — app won't re-ask quality
   }
   return sendToApp(item.url, opts);
 }

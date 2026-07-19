@@ -248,7 +248,7 @@
       <span class="md-fmeta">${meta}</span>
       <button class="md-fdl" type="button" title="Download this quality">⬇</button>
     `;
-    let sel = {};
+    let sel = f.best ? { best: true } : {};   // mark ⭐ Best as an explicit choice
     if (!f.best) {
       if (f.audio_only) sel = { audio_only: true, format_id: f.format_id };
       else if (f.format_id) sel = { format_id: f.format_id };

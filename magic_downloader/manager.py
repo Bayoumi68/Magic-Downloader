@@ -198,9 +198,16 @@ class DownloadManager:
             if audio_only:
                 media_meta["audio_only"] = True
             if not audio_only and not media_meta.get("format_id") and not media_meta.get("height"):
-                dq = str(self.settings.get("default_video_quality") or "best")
-                if dq.isdigit():
-                    media_meta["height"] = int(dq)
+                # data["best"] = the user explicitly clicked ⭐ Best in the picker,
+                # so take best quality — don't fall through to the default/ask prompt.
+                if not data.get("best"):
+                    dq = str(self.settings.get("default_video_quality") or "best")
+                    if dq.isdigit():
+                        media_meta["height"] = int(dq)
+                    elif dq == "ask":
+                        # No explicit quality and "Ask each time" is on — flag it so
+                        # the GUI pops the quality picker instead of auto-grabbing.
+                        media_meta["ask_quality"] = True
 
         return {
             "url": url,

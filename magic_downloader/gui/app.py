@@ -1630,9 +1630,17 @@ class MagicDownloaderApp(tk.Tk):
         token = str(self.manager.settings.get("browser_token") or "")
 
         def on_add(data: dict) -> dict:
+            spec = self.manager.suggest_capture(data)
+            # "Ask each time" quality: a video/stream arrived without an explicit
+            # quality pick — pop the quality picker instead of auto-grabbing it.
+            if spec.get("is_stream") and (spec.get("media_meta") or {}).get("ask_quality"):
+                try:
+                    self.after(0, lambda u=spec["url"]: self._add_video(u))
+                    return {"prompted": True, "filename": spec["filename"], "media_type": spec["media_type"]}
+                except tk.TclError:
+                    pass   # headless — fall through to a normal add
             #: pop the "Download File Info" dialog unless disabled.
             if self.manager.settings.get("confirm_browser_captures", True):
-                spec = self.manager.suggest_capture(data)
                 try:
                     self.after(0, lambda: self._show_capture_dialog(spec))
                 except tk.TclError:
