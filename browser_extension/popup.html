@@ -105,6 +105,16 @@
     .hint { color: #5a6a7a; font-size: 11px; margin-top: 10px; }
     code { background: #e8eef5; padding: 1px 4px; border-radius: 3px; }
     .warn { color: #b9770a; font-size: 11px; margin-top: 6px; }
+    #pinHint {
+      display: none; padding: 10px 14px; background: #fff7e6; color: #7a5b12;
+      font-size: 12px; line-height: 1.5; border-bottom: 1px solid #f0e2c0;
+    }
+    #pinHint b { color: #6b4e0a; }
+    #pinHint button {
+      margin-top: 7px; padding: 4px 12px; border: none; border-radius: 5px;
+      background: #2b579a; color: #fff; font: inherit; font-weight: 600; cursor: pointer;
+    }
+    #pinHint button:hover { background: #1e3f73; }
   </style>
 </head>
 <body>
@@ -112,6 +122,11 @@
     Magic Downloader
     <span>Video grabber · multi-connection downloads</span>
   </header>
+  <div id="pinHint">
+    📌 <b>Pin me to your toolbar:</b> click the puzzle <b>🧩</b> icon (top-right of the browser),
+    then click the pin next to <b>Magic Downloader</b> — so it's always one click away.
+    <div><button id="pinHintClose" type="button">Got it</button></div>
+  </div>
   <div class="body">
     <div class="status">
       <div class="dot" id="dot"></div>

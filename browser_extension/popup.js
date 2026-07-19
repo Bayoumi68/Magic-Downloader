@@ -296,4 +296,23 @@ $("recheck").addEventListener("click", async () => {
   await renderMedia();
 });
 
+function setupPinHint() {
+  // Chrome hides newly-installed extensions in the puzzle (🧩) menu, so nudge
+  // the user to pin us. Firefox already shows the toolbar icon — skip it there.
+  const el = $("pinHint");
+  if (!el || typeof browser !== "undefined") return;
+  B.storage.local
+    .get({ md_pin_hint_dismissed: false })
+    .then((r) => { if (!r.md_pin_hint_dismissed) el.style.display = "block"; })
+    .catch(() => {});
+  const close = $("pinHintClose");
+  if (close) {
+    close.addEventListener("click", () => {
+      el.style.display = "none";
+      try { B.storage.local.set({ md_pin_hint_dismissed: true }); } catch (_) {}
+    });
+  }
+}
+
 load();
+setupPinHint();
