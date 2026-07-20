@@ -17,6 +17,7 @@ from __future__ import annotations
 import struct
 import threading
 import time
+from collections import deque
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -95,7 +96,8 @@ class MediaDownloadEngine:
                 if k and v:
                     self._session.headers[str(k)] = str(v)
         self._key_cache: dict[str, bytes] = {}
-        self._speed_window: list[tuple[float, int]] = []
+        self._speed_window: deque[tuple[float, int]] = deque()
+        self._speed_total = 0
         self._seg_done = 0
         self._seg_total = 0
 
@@ -128,12 +130,15 @@ class MediaDownloadEngine:
         with self._lock:
             self.job.tick_active()
             self._speed_window.append((now, n_bytes))
+            self._speed_total += n_bytes
+            # Expire from the FRONT with a running total instead of rebuilding
+            # and re-summing the whole window on every segment (see engine.py).
             cutoff = now - 3.0
-            self._speed_window = [(t, b) for t, b in self._speed_window if t >= cutoff]
-            total = sum(b for _, b in self._speed_window)
+            while self._speed_window and self._speed_window[0][0] < cutoff:
+                self._speed_total -= self._speed_window.popleft()[1]
             if self._speed_window:
                 dt = max(0.001, now - self._speed_window[0][0])
-                self.job.speed_bps = total / dt
+                self.job.speed_bps = self._speed_total / dt
 
     def _set_progress_meta(self) -> None:
         with self._lock:

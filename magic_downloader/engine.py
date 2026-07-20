@@ -7,6 +7,7 @@ import os
 import re
 import threading
 import time
+from collections import deque
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Callable
@@ -55,7 +56,8 @@ class DownloadEngine:
             for k, v in job.extra_headers.items():
                 if k and v:
                     self._session.headers[str(k)] = str(v)
-        self._speed_window: list[tuple[float, int]] = []
+        self._speed_window: deque[tuple[float, int]] = deque()
+        self._speed_total = 0
         self._stop = False
 
     def stop(self) -> None:
@@ -102,13 +104,18 @@ class DownloadEngine:
         with self._lock:
             self.job.tick_active()
             self._speed_window.append((now, n_bytes))
-            # Keep ~3 seconds of samples
+            self._speed_total += n_bytes
+            # Expire old samples from the FRONT, keeping a running total (~3s of
+            # samples). The old code rebuilt AND re-summed the whole window on
+            # EVERY chunk of EVERY connection — hundreds of thousands of list ops
+            # per second on a fast link, holding this lock the whole time, which
+            # starved slower CPUs and made the app look hung.
             cutoff = now - 3.0
-            self._speed_window = [(t, b) for t, b in self._speed_window if t >= cutoff]
-            total = sum(b for _, b in self._speed_window)
+            while self._speed_window and self._speed_window[0][0] < cutoff:
+                self._speed_total -= self._speed_window.popleft()[1]
             if self._speed_window:
                 dt = max(0.001, now - self._speed_window[0][0])
-                self.job.speed_bps = total / dt
+                self.job.speed_bps = self._speed_total / dt
 
     def probe(self) -> None:
         """HEAD/GET to learn size, filename, range support."""

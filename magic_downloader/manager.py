@@ -43,6 +43,14 @@ class DownloadManager:
         self._pause_events: dict[str, threading.Event] = {}
         self._lock = threading.RLock()
         self._io_lock = threading.Lock()   # serializes jobs.json writes, apart from _lock
+        # Claim-gates for the progress/persist throttles. WITHOUT these, every
+        # worker thread passes the same unsynchronised time check in the same
+        # instant, so they ALL serialize the whole job list and queue a disk
+        # write at once. That pins _lock, the Tk main thread blocks on it, and
+        # the app looks frozen — only on slower machines, which is why it never
+        # reproduced on the dev box.
+        self._persist_gate = threading.Lock()
+        self._progress_gate = threading.Lock()
         self._listeners: list[Listener] = []
         self._persist_timer: float = 0.0
         self._last_progress_notify: float = 0.0
@@ -78,9 +86,12 @@ class DownloadManager:
 
     def _persist(self, force: bool = False) -> None:
         now = time.monotonic()
-        if not force and now - self._persist_timer < 1.0:
-            return
-        self._persist_timer = now
+        # Claim the debounce slot atomically so only ONE thread per interval does
+        # the (relatively expensive) serialize + write; see _persist_gate above.
+        with self._persist_gate:
+            if not force and now - self._persist_timer < 1.0:
+                return
+            self._persist_timer = now
         # Serialize under the state lock (fast, consistent), but do the disk
         # write OUTSIDE it. Holding _lock across the write stalled every other
         # lock user — get_job(), the tray menu reading a folded download's % —
@@ -542,16 +553,23 @@ class DownloadManager:
         return job.status == DownloadStatus.CANCELLED
 
     def _on_progress(self, job: DownloadJob) -> None:
-        # Called from download worker threads on EVERY chunk (per connection).
-        # Persist is already debounced; throttle the UI notify too, otherwise a
-        # multi-connection download fires thousands of cross-thread GUI refreshes
-        # per second and locks up the whole machine. ~8/sec is plenty smooth
-        # (the GUI also self-refreshes on a 400ms timer).
-        self._persist(force=False)
+        # Called from download worker threads on EVERY chunk (per connection) and
+        # on every stream segment. A multi-connection download fires thousands of
+        # these per second across many threads, so this must do as close to
+        # NOTHING as possible: on a slow CPU any real work (or lock traffic) here
+        # starves the Tk main loop and the app appears to hang.
+        #
+        # Claim a ~8/sec slot under a gate; every other call returns immediately.
+        # Persisting only happens on a claimed slot too (and is itself debounced
+        # to ~1/sec), so the disk write cadence is unchanged. The GUI also
+        # self-refreshes on a 400ms timer, so 8/sec stays perfectly smooth.
         now = time.monotonic()
-        if now - self._last_progress_notify >= 0.12:
+        with self._progress_gate:
+            if now - self._last_progress_notify < 0.12:
+                return
             self._last_progress_notify = now
-            self._notify()
+        self._persist(force=False)
+        self._notify()
 
     def pause_job(self, job_id: str) -> None:
         with self._lock:
