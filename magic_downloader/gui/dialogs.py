@@ -1124,12 +1124,66 @@ class SettingsDialog(tk.Toplevel):
         self.token_var = tk.StringVar(value=str(self.settings.get("browser_token") or ""))
         ttk.Entry(f, textvariable=self.token_var).grid(row=3, column=1, columnspan=2, sticky="ew", pady=6)
 
+        sep = tk.Frame(f, bg=T.BORDER, height=1)
+        sep.grid(row=4, column=0, columnspan=3, sticky="ew", pady=12)
+        tk.Label(f, text="Browser extension", bg=T.BG, fg=T.ACCENT,
+                 font=T.FONT_UI_BOLD, anchor="w").grid(row=5, column=0, columnspan=3, sticky="w")
+
+        self._ext_rows = tk.Frame(f, bg=T.BG)
+        self._ext_rows.grid(row=6, column=0, columnspan=3, sticky="ew", pady=(6, 0))
+
+        self.ext_status = tk.Label(f, text="", bg=T.BG, fg=T.FG_MUTED, font=T.FONT_SMALL,
+                                   anchor="w", justify=tk.LEFT, wraplength=440)
+        self.ext_status.grid(row=7, column=0, columnspan=3, sticky="w", pady=(6, 0))
+        self._build_extension_rows()
+
         self._hint(
-            f, 4,
-            "Load the unpacked extension from the browser_extension/ folder in "
-            "Chrome/Edge/Firefox, then match this port in the extension popup.",
+            f, 8,
+            "“Install” registers the extension from the store, then your browser "
+            "asks you to enable it on next start — browsers require that "
+            "confirmation, no app can skip it. Firefox opens its add-ons page.",
             col=0, span=3,
         )
+
+    # ── browser extension install ───────────────────────────────────────
+    def _build_extension_rows(self) -> None:
+        from magic_downloader import browser_install as BI
+
+        for w in self._ext_rows.winfo_children():
+            w.destroy()
+        found = BI.installed_browsers()
+        if not found:
+            tk.Label(self._ext_rows, text="No supported browser detected.", bg=T.BG,
+                     fg=T.FG_MUTED, font=T.FONT_SMALL, anchor="w").pack(fill=tk.X)
+            return
+        for b in found:
+            staged = BI.is_registered(b)
+            row = tk.Frame(self._ext_rows, bg=T.BG)
+            row.pack(fill=tk.X, pady=2)
+            tk.Label(row, text=b.name + ("   ✅ installed" if staged else ""), bg=T.BG,
+                     fg=T.FG, font=T.FONT_UI, anchor="w").pack(side=tk.LEFT)
+            if b.chromium:
+                ttk.Button(row, text="Remove" if staged else "Install", width=10,
+                           command=lambda x=b, s=staged: self._ext_action(x, not s)
+                           ).pack(side=tk.RIGHT)
+            ttk.Button(row, text="Store page", width=11,
+                       command=lambda x=b: BI.open_store(x)).pack(side=tk.RIGHT, padx=(0, 6))
+
+    def _ext_action(self, b, install: bool) -> None:
+        from magic_downloader import browser_install as BI
+
+        ok = BI.register(b) if install else BI.unregister(b)
+        if not ok:
+            self.ext_status.configure(
+                text=f"Couldn't update the registry entry for {b.name}.", fg=T.RED)
+        elif install:
+            self.ext_status.configure(
+                text=f"Staged for {b.name}. Restart {b.name} — it will ask you to "
+                     f"enable Magic Downloader. (Browsers always ask; that step "
+                     f"can't be skipped.)", fg=T.GREEN_DONE)
+        else:
+            self.ext_status.configure(text=f"Removed the {b.name} entry.", fg=T.FG_MUTED)
+        self._build_extension_rows()
 
     # ── save ────────────────────────────────────────────────────────────
     def _browse_into(self, var: tk.StringVar) -> None:

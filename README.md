@@ -8,7 +8,7 @@ A **fast, multi-connection** download manager for Windows, with a **real browser
 [![Downloads](https://img.shields.io/github/downloads/Bayoumi68/Magic-Downloader/total)](https://github.com/Bayoumi68/Magic-Downloader/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-## ⬇️ Download — latest version: **v0.5.42**
+## ⬇️ Download — latest version: **v0.5.43**
 
 **[Get the latest release →](https://github.com/Bayoumi68/Magic-Downloader/releases/latest)**
 
@@ -19,7 +19,7 @@ _This link always points to the newest version (the filename never changes):_
 > **Why the “harmful / unknown publisher” warning?** The app is **not code-signed** (a signing certificate costs money), so Windows SmartScreen and some antivirus flag it as *unrecognized* — not because anything is actually wrong. It's open-source; you can build it yourself. Verify your download against [`SHA256SUMS.txt`](https://github.com/Bayoumi68/Magic-Downloader/releases/latest/download/SHA256SUMS.txt) (`Get-FileHash file -Algorithm SHA256`).
 >
 > To install anyway: on the SmartScreen prompt click **More info → Run anyway**; if your antivirus quarantines it, restore it / add an exclusion. See [PUBLISHING.md](PUBLISHING.md).
-> Browser extension: install from [`browser_extension/`](browser_extension/) (Chrome/Edge) or [FIREFOX_INSTALL.md](FIREFOX_INSTALL.md) (Firefox).
+> **Browser extension:** easiest is **Options → Browser → Install** inside the app. Or get it from the stores directly — [Chrome / Edge / Brave / Opera](https://chromewebstore.google.com/detail/pgiehelnpkakggoeglldnhmidapoeblb) · [Firefox](https://addons.mozilla.org/en-US/firefox/addon/magic-downloader/). Store installs **auto-update**.
 
 ## Features
 
@@ -97,8 +97,7 @@ python -m magic_downloader
 Magic Downloader listens on **`http://127.0.0.1:7373`** (configurable) while the app is open.
 
 1. Start the app — toolbar should show **Browser: :7373**
-2. Load the unpacked extension from `browser_extension/`  
-   See [browser_extension/README.md](browser_extension/README.md) for step-by-step install
+2. Install the extension — **Options → Browser → Install** (registers it from the store; your browser then asks you to enable it), or add it straight from the [Chrome Web Store](https://chromewebstore.google.com/detail/pgiehelnpkakggoeglldnhmidapoeblb) / [Firefox Add-ons](https://addons.mozilla.org/en-US/firefox/addon/magic-downloader/). Store installs auto-update; loading the unpacked `browser_extension/` folder is only for development (see [browser_extension/README.md](browser_extension/README.md))
 3. On a supported video, click the extension **toolbar icon** → the popup lists **“This page's video”** with a quality dropdown → pick one → it downloads here
 4. On sites with a direct `<video>`, the blue **“⬇ Download”** button appears on the player
 5. Right-click a link → **Download with Magic Downloader**  
