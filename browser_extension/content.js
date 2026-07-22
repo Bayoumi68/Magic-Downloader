@@ -72,24 +72,76 @@
 
   // ── shared panel ──────────────────────────────────────────────────────
   let panel = null;
+  const PANEL_POS_KEY = "md_panel_pos";
+  let panelPos = null;   // {left, top} once the user has dragged the panel
 
   function buildPanel(root) {
     panel = document.createElement("div");
     panel.id = "md-panel";
     panel.innerHTML = `
-      <h3>Magic Downloader <button class="md-close" title="Close">×</button></h3>
+      <h3 title="Drag to move · resize from the bottom-right corner">Magic Downloader <button class="md-close" title="Close">×</button></h3>
       <div id="md-status" class="md-status">Checking app…</div>
       <div id="md-list"></div>
     `;
     root.appendChild(panel);
     panel.querySelector(".md-close").addEventListener("click", () => closePanel());
     panel.addEventListener("click", (e) => e.stopPropagation());
+    // Drag the panel by its title bar; the × must not start a drag.
+    makePanelDraggable(panel.querySelector("h3"));
+    panel.querySelector(".md-close").addEventListener("pointerdown", (e) => e.stopPropagation());
+    restorePanelPos();
+  }
+
+  function setPanelPos(left, top) {
+    const w = panel.offsetWidth || 340;
+    const h = panel.offsetHeight || 200;
+    const l = Math.max(2, Math.min(window.innerWidth - w - 2, left));
+    const t = Math.max(2, Math.min(window.innerHeight - h - 2, top));
+    panel.style.setProperty("left", l + "px", "important");
+    panel.style.setProperty("top", t + "px", "important");
+    panel.style.setProperty("right", "auto", "important");
+    panel.style.setProperty("bottom", "auto", "important");
+  }
+
+  function makePanelDraggable(handle) {
+    let ox = 0;
+    let oy = 0;
+    attachDrag(handle, {
+      onStart: () => {
+        const pr = panel.getBoundingClientRect();
+        ox = pr.left;
+        oy = pr.top;
+        setPanelPos(pr.left, pr.top); // switch from right/bottom to left/top
+      },
+      onMove: (dx, dy) => setPanelPos(ox + dx, oy + dy),
+      onEnd: (moved) => {
+        if (!moved) return;
+        const pr = panel.getBoundingClientRect();
+        panelPos = { left: pr.left, top: pr.top };
+        try {
+          B.storage.local.set({ [PANEL_POS_KEY]: panelPos });
+        } catch (_) {
+          /* ignore */
+        }
+      },
+    });
+  }
+
+  function restorePanelPos() {
+    try {
+      B.storage.local.get(PANEL_POS_KEY).then((r) => {
+        const p = r && r[PANEL_POS_KEY];
+        if (p && typeof p.left === "number") panelPos = p;
+      });
+    } catch (_) {
+      /* storage unavailable */
+    }
   }
 
   function openPanel() {
     if (!panel) return;
+    panel.classList.add("md-open");   // show first so its size is measurable
     positionPanel();
-    panel.classList.add("md-open");
     refreshStatus();
     renderList();
   }
@@ -424,7 +476,13 @@
   }
 
   function positionPanel() {
-    if (!panel || !fab) return;
+    if (!panel) return;
+    // The user dragged it somewhere — keep that spot, just clamp on-screen.
+    if (panelPos) {
+      setPanelPos(panelPos.left, panelPos.top);
+      return;
+    }
+    if (!fab) return;
     const r = fab.getBoundingClientRect();
     const pw = 340;
     const ph = Math.min(window.innerHeight * 0.7, 420);
@@ -658,7 +716,11 @@
     }, true);
 
     window.addEventListener("scroll", repositionAll, true);
-    window.addEventListener("resize", repositionAll, true);
+    window.addEventListener("resize", () => {
+      repositionAll();
+      // Keep the panel inside the viewport when the window shrinks (auto-fit).
+      if (panel && panel.classList.contains("md-open")) positionPanel();
+    }, true);
 
     // Observe DOM for dynamically added <video> players.
     const mo = new MutationObserver(() => scheduleOverlayRefresh());

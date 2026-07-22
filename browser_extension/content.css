@@ -85,9 +85,16 @@
   right: 18px !important;
   bottom: 80px !important;
   z-index: 2147483647 !important;
-  width: 340px !important;
-  max-height: 70vh !important;
+  /* width/height/max-height are intentionally NOT !important so the browser's
+     native resize handle (resize: both) can override them when the user drags
+     the corner. The #md-panel id is specific enough that page CSS won't. */
+  width: 340px;
+  min-width: 260px;
+  min-height: 130px;
+  max-width: 96vw;
+  max-height: 85vh;
   overflow: auto !important;
+  resize: both !important;
   background: #ffffff !important;
   color: #1a1a1a !important;
   border-radius: 10px !important;
@@ -97,6 +104,8 @@
   display: none !important;
 }
 #md-panel.md-open { display: block !important; }
+#md-panel h3 { cursor: move !important; user-select: none !important; }
+#md-panel h3 .md-close { cursor: pointer !important; }
 #md-panel h3 {
   margin: 0 0 6px 0 !important;
   font-size: 14px !important;
